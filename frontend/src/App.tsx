@@ -3,6 +3,8 @@ import { Login } from "./pages/Login";
 import { Dashboard } from "./pages/Dashboard";
 import { BrandVault } from "./pages/BrandVault";
 import { NewContentReview } from "./pages/NewContentReview";
+import { ReviewWorkspace } from "./pages/ReviewWorkspace";
+import { ApprovalPassport } from "./pages/ApprovalPassport";
 
 function App() {
   return (
@@ -14,6 +16,8 @@ function App() {
         <Route path="/brand-vault" element={<BrandVault />} />
         <Route path="/new-review" element={<NewContentReview />} />
         <Route path="/reviews" element={<NewContentReview />} />
+        <Route path="/workspace" element={<ReviewWorkspace />} />
+        <Route path="/approval" element={<ApprovalPassport />} />
       </Routes>
     </BrowserRouter>
   );

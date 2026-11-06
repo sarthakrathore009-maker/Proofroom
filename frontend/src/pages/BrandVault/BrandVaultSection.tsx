@@ -15,12 +15,6 @@ const vectorFlask =
   "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23173d35' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><path d='M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2'/><line x1='8.5' y1='2' x2='15.5' y2='2'/><line x1='7' y1='16' x2='17' y2='16'/></svg>";
 const vectorShieldCheck =
   "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23707871' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><path d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/><polyline points='9 12 11 14 15 10'/></svg>";
-const vectorCheckGreen =
-  "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23173d35' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><path d='m9 12 2 2 4-4'/></svg>";
-const vectorHelp =
-  "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23707871' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><path d='M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3'/><line x1='12' y1='17' x2='12.01' y2='17'/></svg>";
-const vectorBell =
-  "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23707871' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9'/><path d='M13.73 21a2 2 0 0 1-3.46 0'/></svg>";
 
 type Entry = {
   title: string;
@@ -138,62 +132,6 @@ export const BrandVaultSection = () => {
 
   return (
     <main className="flex flex-col items-start relative flex-1 grow bg-[#f8f9f6]">
-      <header className="flex h-[72px] items-center justify-between px-10 py-0 relative self-stretch w-full bg-white border-b [border-bottom-style:solid] border-[#dfe3da]">
-        <nav
-          aria-label="Breadcrumb"
-          className="inline-flex items-center gap-2.5 relative flex-[0_0_auto]"
-        >
-          <span className="w-fit mt-[-1.00px] [font-family:'Inter-Regular',Helvetica] font-normal text-[#707871] text-xs leading-[18px] whitespace-nowrap relative tracking-[0]">
-            Aster
-          </span>
-          <span className="w-fit mt-[-1.00px] [font-family:'Inter-Regular',Helvetica] font-normal text-[#a2a8a1] text-xs leading-[18px] whitespace-nowrap relative tracking-[0]">
-            /
-          </span>
-          <span
-            aria-current="page"
-            className="w-fit mt-[-1.00px] [font-family:'Inter-Medium',Helvetica] font-medium text-[#252b29] text-xs leading-[18px] whitespace-nowrap relative tracking-[0]"
-          >
-            Brand Vault
-          </span>
-        </nav>
-        <div className="inline-flex items-center gap-6 relative flex-[0_0_auto]">
-          <div className="inline-flex gap-[7px] items-center relative flex-[0_0_auto]">
-            <div className="relative w-3.5 h-3.5">
-              <img
-                className="absolute w-[95.24%] h-[95.24%] top-[4.76%] left-[4.76%]"
-                alt=""
-                src={vectorCheckGreen}
-              />
-            </div>
-            <p className="w-fit mt-[-1.00px] [font-family:'Inter-Regular',Helvetica] font-normal text-[#707871] text-[11px] leading-[16.5px] whitespace-nowrap relative tracking-[0]">
-              Brand Vault up to date
-            </p>
-          </div>
-          <div aria-hidden="true" className="relative w-px h-5 bg-[#dfe3da]" />
-          <button
-            type="button"
-            aria-label="Help"
-            className="relative w-[18px] h-[18px] cursor-pointer"
-          >
-            <img
-              className="absolute w-[94.45%] h-[94.45%] top-[5.55%] left-[5.55%]"
-              alt=""
-              src={vectorHelp}
-            />
-          </button>
-          <button
-            type="button"
-            aria-label="Notifications"
-            className="relative w-[18px] h-[18px] cursor-pointer"
-          >
-            <img
-              className="absolute w-[90.28%] h-[94.45%] top-[5.55%] left-[9.72%]"
-              alt=""
-              src={vectorBell}
-            />
-          </button>
-        </div>
-      </header>
       <div className="gap-7 pt-[34px] pb-9 px-10 flex flex-col items-start relative self-stretch w-full flex-[0_0_auto]">
         <section
           aria-labelledby="brand-vault-title"

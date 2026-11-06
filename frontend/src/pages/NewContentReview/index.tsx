@@ -1,12 +1,16 @@
 import { ContentReviewSection } from "./ContentReviewSection";
-import { WorkspaceNavigationSection } from "./WorkspaceNavigationSection";
+import { Sidebar } from "../../components/Sidebar";
+import { TopHeader } from "../../components/TopHeader";
 
 export const NewContentReview = () => {
   return (
-    <main className="flex min-h-screen items-start bg-[#f6f5ef] text-[#171717]">
-      <WorkspaceNavigationSection />
-      <ContentReviewSection />
-    </main>
+    <div className="flex min-h-screen w-full items-stretch bg-[#f6f5ef] text-[#252b29]">
+      <Sidebar />
+      <div className="flex flex-1 flex-col min-w-0">
+        <TopHeader breadcrumb="Reviews / New review" />
+        <ContentReviewSection />
+      </div>
+    </div>
   );
 };
 

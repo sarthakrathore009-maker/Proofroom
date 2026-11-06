@@ -1,12 +1,5 @@
 import { useState } from "react";
 
-// Screenshot ke exact Dashboard SVG icons
-const vector7 =
-  "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23173d35' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><path d='m9 12 2 2 4-4'/></svg>";
-const vector8 =
-  "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23707871' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><path d='M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3'/><line x1='12' y1='17' x2='12.01' y2='17'/></svg>";
-const vector9 =
-  "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23707871' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9'/><path d='M13.73 21a2 2 0 0 1-3.46 0'/></svg>";
 const vector10 =
   "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><line x1='12' y1='5' x2='12' y2='19'/><line x1='5' y1='12' x2='19' y2='12'/></svg>";
 const vector11 =
@@ -164,69 +157,7 @@ export const DashboardSection = () => {
   const displayedReviews = showAllReviews ? reviews : reviews.slice(0, 5);
 
   return (
-    <main className="flex flex-col items-start relative flex-1 grow">
-      <header className="flex h-[72px] items-center justify-between px-10 py-0 relative self-stretch w-full bg-white border-b [border-bottom-style:solid] border-[#dfe3da]">
-        <nav
-          aria-label="Breadcrumb"
-          className="inline-flex items-center gap-2.5 relative flex-[0_0_auto]"
-        >
-          <span className="w-fit mt-[-1.00px] [font-family:'Inter-Regular',Helvetica] font-normal text-[#707871] text-xs leading-[18px] whitespace-nowrap relative tracking-[0]">
-            Aster
-          </span>
-          <span
-            aria-hidden="true"
-            className="w-fit mt-[-1.00px] [font-family:'Inter-Regular',Helvetica] font-normal text-[#a2a8a1] text-xs leading-[18px] whitespace-nowrap relative tracking-[0]"
-          >
-            /
-          </span>
-          <span
-            aria-current="page"
-            className="w-fit mt-[-1.00px] [font-family:'Inter-Medium',Helvetica] font-medium text-[#252b29] text-xs leading-[18px] whitespace-nowrap relative tracking-[0]"
-          >
-            Dashboard
-          </span>
-        </nav>
-        <div className="inline-flex items-center gap-6 relative flex-[0_0_auto]">
-          <div className="inline-flex items-center gap-[7px] relative flex-[0_0_auto]">
-            <span className="relative w-3.5 h-3.5">
-              <img
-                className="absolute w-[95.24%] h-[95.24%] top-[4.76%] left-[4.76%]"
-                alt=""
-                aria-hidden="true"
-                src={vector7}
-              />
-            </span>
-            <span className="w-fit mt-[-1.00px] [font-family:'Inter-Regular',Helvetica] font-normal text-[#707871] text-[11px] leading-[16.5px] whitespace-nowrap relative tracking-[0]">
-              Brand Vault up to date
-            </span>
-          </div>
-          <span aria-hidden="true" className="w-px h-5 relative bg-[#dfe3da]" />
-          <button
-            type="button"
-            aria-label="Help"
-            className="relative w-[18px] h-[18px] cursor-pointer"
-          >
-            <img
-              className="absolute w-[94.45%] h-[94.45%] top-[5.55%] left-[5.55%]"
-              alt=""
-              aria-hidden="true"
-              src={vector8}
-            />
-          </button>
-          <button
-            type="button"
-            aria-label="Notifications"
-            className="relative w-[18px] h-[18px] cursor-pointer"
-          >
-            <img
-              className="absolute w-[90.28%] h-[94.45%] top-[5.55%] left-[9.72%]"
-              alt=""
-              aria-hidden="true"
-              src={vector9}
-            />
-          </button>
-        </div>
-      </header>
+    <main className="flex flex-col items-start relative flex-1 grow min-w-0">
       <div className="gap-7 pt-[34px] pb-9 px-10 flex flex-col items-start relative self-stretch w-full flex-[0_0_auto]">
         <section
           aria-labelledby="workspace-heading"
