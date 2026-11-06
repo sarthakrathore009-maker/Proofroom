@@ -1,5 +1,5 @@
 import { type FormEvent, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 // Screenshot ke exact icons (Eye-off, White Checkmark, aur White Right Arrow)
 const vector3 =
@@ -127,12 +127,12 @@ const handleSubmit = (event: FormEvent<HTMLFormElement>): void => {
               Keep me signed in
             </span>
           </label>
-          <button
+          <Link
             className="w-fit mt-[-1.00px] [font-family:'Inter-Medium',Helvetica] font-medium text-[#173d35] text-xs leading-[18px] whitespace-nowrap relative tracking-[0] border-0 bg-transparent p-0 cursor-pointer"
-            type="button"
+            to="/forgot-password"
           >
             Forgot password?
-          </button>
+          </Link>
         </div>
         <button
           className="flex h-12 items-center justify-center gap-2.5 relative self-stretch w-full bg-[#173d35] rounded-md overflow-hidden border-0 cursor-pointer"

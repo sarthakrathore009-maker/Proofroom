@@ -30,3 +30,14 @@ If you are developing a production application, we recommend enabling type-aware
 ```
 
 See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+
+## Account screens and API configuration
+
+Copy `.env.example` to `.env.local` and set `VITE_API_BASE_URL` to the backend API base URL. The account screens call:
+
+- `POST /auth/password/forgot` with `{ "email": "..." }`
+- `POST /auth/password/change` with `{ "currentPassword": "...", "newPassword": "..." }`
+
+Both requests send JSON, include browser credentials, and expect a JSON error body with an optional `message`. The backend must enable CORS for the frontend origin and allow credentials when cookie-based sessions are used. Without `VITE_API_BASE_URL`, the screens show a configuration error rather than reporting a false success. The repository does not include a backend, so these endpoint contracts need to match the deployed API.
+
+Added routes: `/forgot-password`, `/profile`, `/403`, and `/ui-states`. Unknown routes render the 404 screen.

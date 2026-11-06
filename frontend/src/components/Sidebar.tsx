@@ -110,6 +110,9 @@ export const Sidebar = () => {
           </button>
           {profileMenuOpen && (
             <div role="menu" className="absolute bottom-full left-0 right-0 z-10 mb-1 rounded-md border border-[#dfe3da] bg-white p-1 shadow-sm">
+              <button type="button" role="menuitem" onClick={() => { setProfileMenuOpen(false); navigate("/profile"); }} className="w-full rounded px-2 py-1.5 text-left text-[11px] text-[#707871] hover:bg-[#f8f9f6]">
+                My profile
+              </button>
               <button type="button" role="menuitem" onClick={() => { setProfileMenuOpen(false); navigate("/login"); }} className="w-full rounded px-2 py-1.5 text-left text-[11px] text-[#707871] hover:bg-[#f8f9f6]">
                 Sign out
               </button>
