@@ -1,4 +1,5 @@
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000").replace(/\/$/, "");
+// http://localhost:5000 ko hata kar seedha Render URL likh dein:
+const API_BASE_URL = (import.meta.env.VITE_API_URL || "https://proofroom-3x8b.onrender.com").replace(/\/$/, "");
 
 type ApiOptions = {
   method?: "GET" | "POST" | "PATCH";
