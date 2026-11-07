@@ -1,4 +1,4 @@
-// http://localhost:5000 ko hata kar seedha Render URL likh dein:
+// Use the deployed Render API by default; VITE_API_URL can override it.
 const API_BASE_URL = (import.meta.env.VITE_API_URL || "https://proofroom-3x8b.onrender.com").replace(/\/$/, "");
 
 type ApiOptions = {
