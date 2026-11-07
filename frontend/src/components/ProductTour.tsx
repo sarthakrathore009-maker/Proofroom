@@ -74,9 +74,9 @@ const tourSteps: TourStep[] = [
           rel="noopener noreferrer"
           className="underline font-medium text-emerald-700"
         >
-          Download sample test image here
+          
         </a>{" "}
-        to test the file upload.
+
       </p>
     ),
   },
