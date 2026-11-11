@@ -56,7 +56,7 @@ const sampleDownloadExtra = (
 
 export const ADMIN_TOUR_STEPS: TourStep[] = [
   {
-    target: "governance-overview",
+    target: "dashboard-overview",
     route: "/dashboard",
     title: "Governance Overview & Clarity Radar",
     description:
@@ -64,7 +64,7 @@ export const ADMIN_TOUR_STEPS: TourStep[] = [
     access: { kind: "unlocked", forRole: "ADMIN" },
   },
   {
-    target: "brand-vault-grid",
+    target: "brand-vault-management",
     route: "/brand-vault",
     title: "Brand Vault Management",
     description:
@@ -80,7 +80,7 @@ export const ADMIN_TOUR_STEPS: TourStep[] = [
     access: { kind: "locked", forRole: "ADMIN", openFor: "CREATOR" },
   },
   {
-    target: "release-passport-card",
+    target: "reviews-approval-passport",
     route: "/approval",
     title: "Final Sign-Off & Release Passport",
     description:
@@ -101,7 +101,7 @@ export const CREATOR_TOUR_STEPS: TourStep[] = [
     extra: sampleDownloadExtra,
   },
   {
-    target: "submit-approval-btn",
+    target: "reviews-findings-section",
     route: "/reviews",
     title: "Revise Drafts & Request Exceptions",
     description:
@@ -109,7 +109,7 @@ export const CREATOR_TOUR_STEPS: TourStep[] = [
     access: { kind: "unlocked", forRole: "CREATOR" },
   },
   {
-    target: "brand-vault-grid",
+    target: "brand-vault-management",
     route: "/brand-vault",
     title: "Brand Vault Rules (Read-Only)",
     description:
@@ -117,7 +117,7 @@ export const CREATOR_TOUR_STEPS: TourStep[] = [
     access: { kind: "locked", forRole: "CREATOR", openFor: "ADMIN" },
   },
   {
-    target: "release-passport-card",
+    target: "reviews-approval-passport",
     route: "/approval",
     title: "Final Approval & Release Passport",
     description:
@@ -129,7 +129,7 @@ export const CREATOR_TOUR_STEPS: TourStep[] = [
 
 export const REVIEWER_TOUR_STEPS: TourStep[] = [
   {
-    target: "proof-cards",
+    target: "reviews-findings-section",
     route: "/reviews",
     title: "Audit Proof Cards & Exception Requests",
     description:
@@ -137,7 +137,7 @@ export const REVIEWER_TOUR_STEPS: TourStep[] = [
     access: { kind: "unlocked", forRole: "REVIEWER" },
   },
   {
-    target: "release-passport-card",
+    target: "reviews-approval-passport",
     route: "/approval",
     title: "Approve & Generate Release Passport",
     description:
@@ -145,7 +145,7 @@ export const REVIEWER_TOUR_STEPS: TourStep[] = [
     access: { kind: "unlocked", forRole: "REVIEWER" },
   },
   {
-    target: "brand-vault-grid",
+    target: "brand-vault-management",
     route: "/brand-vault",
     title: "Brand Vault Modification (Read-Only)",
     description:
@@ -186,7 +186,10 @@ type SpotlightRect = {
 type TooltipPlacement = {
   top: number;
   left: number;
+  placement: "right" | "below" | "left" | "above" | "center";
 };
+
+const VIEWPORT_EDGE = 16;
 
 function wait(ms: number) {
   return new Promise<void>((resolve) => {
@@ -194,13 +197,27 @@ function wait(ms: number) {
   });
 }
 
-async function waitForTarget(selector: string, attempts = 12): Promise<HTMLElement | null> {
-  for (let i = 0; i < attempts; i += 1) {
+function waitForAnimationFrame() {
+  return new Promise<void>((resolve) => {
+    window.requestAnimationFrame(() => resolve());
+  });
+}
+
+async function waitForTarget(selector: string, maxMs = 600): Promise<HTMLElement | null> {
+  const started = Date.now();
+  await waitForAnimationFrame();
+  while (Date.now() - started < maxMs) {
     const el = document.querySelector<HTMLElement>(selector);
-    if (el) return el;
-    await wait(80);
+    if (el) {
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) return el;
+    }
+    await wait(50);
   }
-  return null;
+  const fallback = document.querySelector<HTMLElement>(selector);
+  if (!fallback) return null;
+  const rect = fallback.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0 ? fallback : null;
 }
 
 function measureSpotlight(el: HTMLElement): SpotlightRect {
@@ -213,13 +230,29 @@ function measureSpotlight(el: HTMLElement): SpotlightRect {
   };
 }
 
-function floatingTooltipPos(tooltipWidth = 360, tooltipHeight = 260): TooltipPlacement {
+function clampTooltip(top: number, left: number, tooltipWidth: number, tooltipHeight: number) {
   const viewportW = window.innerWidth;
   const viewportH = window.innerHeight;
   return {
-    top: Math.max(24, Math.min(viewportH - tooltipHeight - 24, viewportH / 2 - tooltipHeight / 2)),
-    left: Math.max(12, Math.min(viewportW - tooltipWidth - 12, viewportW / 2 - tooltipWidth / 2)),
+    top: Math.min(
+      Math.max(VIEWPORT_EDGE, top),
+      Math.max(VIEWPORT_EDGE, viewportH - tooltipHeight - VIEWPORT_EDGE)
+    ),
+    left: Math.min(
+      Math.max(VIEWPORT_EDGE, left),
+      Math.max(VIEWPORT_EDGE, viewportW - tooltipWidth - VIEWPORT_EDGE)
+    ),
   };
+}
+
+function floatingTooltipPos(tooltipWidth = 360, tooltipHeight = 260): TooltipPlacement {
+  const clamped = clampTooltip(
+    window.innerHeight / 2 - tooltipHeight / 2,
+    window.innerWidth / 2 - tooltipWidth / 2,
+    tooltipWidth,
+    tooltipHeight
+  );
+  return { ...clamped, placement: "center" };
 }
 
 function placeTooltip(
@@ -231,22 +264,42 @@ function placeTooltip(
   const viewportW = window.innerWidth;
   const viewportH = window.innerHeight;
 
-  const candidates: TooltipPlacement[] = [
-    { top: spotlight.top, left: spotlight.left + spotlight.width + gap },
-    { top: spotlight.top + spotlight.height + gap, left: spotlight.left },
-    { top: spotlight.top, left: spotlight.left - tooltipWidth - gap },
-    { top: spotlight.top - tooltipHeight - gap, left: spotlight.left },
+  const candidates: Array<TooltipPlacement> = [
+    {
+      placement: "below",
+      top: spotlight.top + spotlight.height + gap,
+      left: spotlight.left + Math.max(0, (spotlight.width - tooltipWidth) / 2),
+    },
+    {
+      placement: "right",
+      top: spotlight.top,
+      left: spotlight.left + spotlight.width + gap,
+    },
+    {
+      placement: "above",
+      top: spotlight.top - tooltipHeight - gap,
+      left: spotlight.left + Math.max(0, (spotlight.width - tooltipWidth) / 2),
+    },
+    {
+      placement: "left",
+      top: spotlight.top,
+      left: spotlight.left - tooltipWidth - gap,
+    },
   ];
 
   for (const candidate of candidates) {
     const fitsX =
-      candidate.left >= 12 && candidate.left + tooltipWidth <= viewportW - 12;
+      candidate.left >= VIEWPORT_EDGE &&
+      candidate.left + tooltipWidth <= viewportW - VIEWPORT_EDGE;
     const fitsY =
-      candidate.top >= 12 && candidate.top + tooltipHeight <= viewportH - 12;
+      candidate.top >= VIEWPORT_EDGE &&
+      candidate.top + tooltipHeight <= viewportH - VIEWPORT_EDGE;
     if (fitsX && fitsY) return candidate;
   }
 
-  return floatingTooltipPos(tooltipWidth, tooltipHeight);
+  const preferred = candidates[0];
+  const clamped = clampTooltip(preferred.top, preferred.left, tooltipWidth, tooltipHeight);
+  return { ...clamped, placement: preferred.placement };
 }
 
 export function clearTourState() {
@@ -273,6 +326,7 @@ export const ProductTour = () => {
   const [spotlight, setSpotlight] = useState<SpotlightRect | null>(null);
   const [tooltipPos, setTooltipPos] = useState<TooltipPlacement>(() => floatingTooltipPos());
   const [ready, setReady] = useState(false);
+  const [hasTarget, setHasTarget] = useState(false);
 
   const tourSteps = TOUR_STEPS_BY_ROLE[tourRole];
   const totalSteps = tourSteps.length;
@@ -337,6 +391,7 @@ export const ProductTour = () => {
 
     const run = async () => {
       setReady(false);
+      setHasTarget(false);
       setTooltipPos(floatingTooltipPos());
 
       if (pathnameRef.current !== step.route) {
@@ -354,17 +409,20 @@ export const ProductTour = () => {
       // Never hide the tour when the target is missing — show a floating modal.
       if (!el) {
         setSpotlight(null);
+        setHasTarget(false);
         setTooltipPos(floatingTooltipPos());
         setReady(true);
         return;
       }
 
-      el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
-      await wait(120);
+      el.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+      await wait(180);
+      await waitForAnimationFrame();
       if (cancelled || token !== syncTokenRef.current) return;
 
       const nextSpotlight = measureSpotlight(el);
       setSpotlight(nextSpotlight);
+      setHasTarget(true);
       setTooltipPos(placeTooltip(nextSpotlight, 360, 260));
       setReady(true);
     };
@@ -388,11 +446,13 @@ export const ProductTour = () => {
       const th = tooltipEl?.offsetHeight ?? 260;
       if (!el) {
         setSpotlight(null);
+        setHasTarget(false);
         setTooltipPos(floatingTooltipPos(tw, th));
         return;
       }
       const nextSpotlight = measureSpotlight(el);
       setSpotlight(nextSpotlight);
+      setHasTarget(true);
       setTooltipPos(placeTooltip(nextSpotlight, tw, th));
     };
 
@@ -478,6 +538,20 @@ export const ProductTour = () => {
           transition: "top 0.25s ease, left 0.25s ease, opacity 0.2s ease",
         }}
       >
+        {hasTarget && tooltipPos.placement !== "center" && (
+          <span
+            aria-hidden="true"
+            className={`absolute h-3 w-3 rotate-45 border border-[#e5e7eb] bg-white ${
+              tooltipPos.placement === "below"
+                ? "-top-1.5 left-8 border-b-0 border-r-0"
+                : tooltipPos.placement === "above"
+                  ? "-bottom-1.5 left-8 border-t-0 border-l-0"
+                  : tooltipPos.placement === "right"
+                    ? "top-6 -left-1.5 border-b-0 border-l-0"
+                    : "top-6 -right-1.5 border-t-0 border-r-0"
+            }`}
+          />
+        )}
         <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6b7280]">
           Step {stepNumber} of {totalSteps} · {tourRole}
         </div>

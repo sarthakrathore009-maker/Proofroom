@@ -1,8 +1,17 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Sidebar } from "../../components/Sidebar";
 import { TopHeader } from "../../components/TopHeader";
 import { apiRequest } from "../../lib/api";
+import { useWorkspaceData, type ReviewDetail } from "../../context/WorkspaceDataContext";
+import { getCurrentUser } from "../../lib/roles";
+import {
+  RoleAccessPill,
+  approvalAccessMessage,
+  contentSubmitAccessMessage,
+  creatorActionLockNote,
+  reviewerActionLockNote,
+} from "../../components/RoleAccessPill";
 
 type ProofCardItem = {
   id: string;
@@ -18,30 +27,7 @@ type ProofCardItem = {
   status: "Open" | "Accepted" | "Dismissed";
 };
 
-type ReviewResponse = {
-  review: {
-    id: string;
-    title: string;
-    content_type: string;
-    body_text: string;
-    review_code: string;
-    creator_name: string;
-    created_at: string;
-  } | null;
-  proofCards: Array<{
-    id: string;
-    severity: "High" | "Medium" | "Low";
-    category_title: string;
-    issue_explanation: string;
-    source_code: string;
-    source_rule_summary: string;
-    original_excerpt: string;
-    suggested_correction: string;
-    resolution_status: "Open" | "Accepted" | "Dismissed";
-  }>;
-};
-
-const mapProofCard = (card: ReviewResponse["proofCards"][number]): ProofCardItem => ({
+const mapProofCard = (card: ReviewDetail["proofCards"][number]): ProofCardItem => ({
   id: card.id,
   severity: card.severity,
   severityBadgeClass:
@@ -74,8 +60,26 @@ const applyAcceptedCorrections = (body: string, cards: ProofCardItem[]) =>
 
 export const ReviewWorkspace = () => {
   const navigate = useNavigate();
+  const { id: routeReviewId } = useParams();
   const [searchParams] = useSearchParams();
-  const requestedReviewId = searchParams.get("reviewId");
+  const requestedReviewId = searchParams.get("reviewId") ?? routeReviewId ?? null;
+  const user = getCurrentUser();
+  const canReview = user.role === "reviewer";
+  const canEdit = user.role === "creator";
+  const submitAccess = contentSubmitAccessMessage(user.role);
+  const approvalAccess = approvalAccessMessage(user.role);
+  const lockNote = creatorActionLockNote(user.role);
+  const reviewLockNote = reviewerActionLockNote(user.role);
+  const {
+    getReviewDetail,
+    reviewDetailsById,
+    latestReviewDetail,
+    putReviewDetail,
+    refreshWorkspaceAfterActivity,
+    ensureInitialLoad,
+    isInitialLoaded,
+  } = useWorkspaceData();
+
   const [cards, setCards] = useState<ProofCardItem[]>([]);
   const [reviewId, setReviewId] = useState<string | null>(null);
   const [reviewBody, setReviewBody] = useState("");
@@ -84,29 +88,39 @@ export const ReviewWorkspace = () => {
   const [reviewCode, setReviewCode] = useState("");
   const [creatorName, setCreatorName] = useState("");
 
+  const applyDetail = (data: ReviewDetail | null) => {
+    if (!data?.review) return;
+    setReviewId(data.review.id);
+    setReviewBody(data.review.body_text);
+    setReviewTitle(data.review.title);
+    setReviewType(data.review.content_type);
+    setReviewCode(data.review.review_code);
+    setCreatorName(data.review.creator_name);
+    setCards(data.proofCards.map(mapProofCard));
+  };
+
   useEffect(() => {
+    if (!isInitialLoaded) {
+      void ensureInitialLoad();
+    }
+  }, [ensureInitialLoad, isInitialLoaded]);
+
+  useEffect(() => {
+    const cached = requestedReviewId
+      ? reviewDetailsById[requestedReviewId]
+      : latestReviewDetail;
+    if (cached?.review) {
+      applyDetail(cached);
+      return;
+    }
     let active = true;
-    const path = requestedReviewId
-      ? `/api/reviews/${encodeURIComponent(requestedReviewId)}`
-      : "/api/reviews/latest";
-    apiRequest<ReviewResponse>(path, { method: "GET" })
-      .then((data) => {
-        if (!active || !data.review) return;
-        setReviewId(data.review.id);
-        setReviewBody(data.review.body_text);
-        setReviewTitle(data.review.title);
-        setReviewType(data.review.content_type);
-        setReviewCode(data.review.review_code);
-        setCreatorName(data.review.creator_name);
-        setCards(data.proofCards.map(mapProofCard));
-      })
-      .catch((error) => {
-        console.error("Unable to load review workspace", error);
-      });
+    void getReviewDetail(requestedReviewId).then((data) => {
+      if (active) applyDetail(data);
+    });
     return () => {
       active = false;
     };
-  }, [requestedReviewId]);
+  }, [getReviewDetail, latestReviewDetail, requestedReviewId, reviewDetailsById]);
 
   const resolvedCount = cards.filter((c) => c.status !== "Open").length;
   const openCount = cards.length - resolvedCount;
@@ -127,6 +141,18 @@ export const ReviewWorkspace = () => {
       setCards((prev) =>
         prev.map((card) => (card.id === id ? { ...card, status: newStatus } : card))
       );
+      if (reviewId) {
+        const existing = reviewDetailsById[reviewId] ?? latestReviewDetail;
+        if (existing) {
+          putReviewDetail({
+            ...existing,
+            proofCards: existing.proofCards.map((card) =>
+              card.id === id ? { ...card, resolution_status: newStatus } : card
+            ),
+          });
+        }
+      }
+      await refreshWorkspaceAfterActivity();
     } catch (error) {
       console.error("Unable to update proof card", error);
     }
@@ -142,6 +168,7 @@ export const ReviewWorkspace = () => {
           final_body_text: applyAcceptedCorrections(reviewBody, cards),
         },
       });
+      await refreshWorkspaceAfterActivity();
       navigate(`/approval?reviewId=${encodeURIComponent(reviewId)}`);
     } catch (error) {
       console.error("Unable to submit review for approval", error);
@@ -154,10 +181,10 @@ export const ReviewWorkspace = () => {
       <div className="flex flex-1 flex-col min-w-0">
         <TopHeader breadcrumb="Reviews / A simpler clean" />
         {/* Workspace Body */}
-        <div className="flex-1 p-10">
+        <div data-tour="reviews-findings-section" className="flex-1 p-10">
           {/* Title & Status Pill */}
-          <div className="flex items-start justify-between">
-            <div className="flex flex-col gap-1">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex flex-col gap-2">
               <span className="text-[11px] font-semibold uppercase tracking-[1.2px] text-[#707871]">
                 Review {reviewCode} · DemoBrand Co.
               </span>
@@ -167,8 +194,12 @@ export const ReviewWorkspace = () => {
               <span className="text-[13px] text-[#707871]">
                 {reviewType} · Submitted by {creatorName}
               </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <RoleAccessPill variant={submitAccess.variant} message={submitAccess.message} />
+                <RoleAccessPill variant={approvalAccess.variant} message={approvalAccess.message} />
+              </div>
             </div>
-            <span className="rounded-full border border-[#fde68a] bg-[#fef3c7] px-3 py-1 text-xs font-medium text-[#92400e]">
+            <span className="rounded-full border border-[#fde68a] bg-[#fef3c7] px-3 py-1 text-xs font-medium text-[#92400e] shrink-0">
               {allResolved ? "Ready for approval" : "In review"}
             </span>
           </div>
@@ -228,6 +259,8 @@ export const ReviewWorkspace = () => {
                   </div>
                   <button
                     type="button"
+                    disabled={!canEdit}
+                    title={canEdit ? "Edit content" : lockNote}
                     onClick={() =>
                       navigate(
                         reviewId
@@ -235,10 +268,10 @@ export const ReviewWorkspace = () => {
                           : "/new-review?new=true"
                       )
                     }
-                    className="flex items-center gap-1.5 text-[13px] text-[#6b7280] hover:text-[#111827] cursor-pointer"
+                    className={`flex items-center gap-1.5 text-[13px] ${canEdit ? "text-[#6b7280] hover:text-[#111827] cursor-pointer" : "cursor-not-allowed text-[#9ca3af]"}`}
                   >
                     <i className="ti ti-edit text-sm" />
-                    <span>Edit content</span>
+                    <span>{canEdit ? "Edit content" : "🔒 Edit content"}</span>
                   </button>
                 </div>
 
@@ -313,15 +346,16 @@ export const ReviewWorkspace = () => {
                   <button
                     type="button"
                     data-tour="submit-approval-btn"
-                    disabled={!allResolved}
+                    disabled={!allResolved || !canEdit}
+                    title={canEdit ? undefined : lockNote}
                     onClick={handleSubmitForApproval}
                     className={`flex items-center gap-1.5 rounded-md px-4 py-2 text-[13px] font-medium transition ${
-                      allResolved
+                      allResolved && canEdit
                         ? "bg-[#173d35] text-white hover:bg-[#245448] cursor-pointer"
                         : "cursor-not-allowed border border-[#e5e7eb] bg-[#f3f4f6] text-[#6b7280] opacity-60"
                     }`}
                   >
-                    <span>Submit for Approval</span>
+                    <span>{canEdit ? "Submit for Approval" : "🔒 Submit for Approval"}</span>
                     <i className="ti ti-arrow-right text-sm" />
                   </button>
                 </div>
@@ -382,19 +416,27 @@ export const ReviewWorkspace = () => {
                   <div className="flex items-center justify-between gap-2 px-4 py-3">
                     <button
                       type="button"
+                      disabled={!canReview}
+                      title={canReview ? "Request changes" : reviewLockNote}
                       onClick={() => handleCardAction(card.id, "Dismissed")}
-                      className="rounded-md border border-[#e5e7eb] bg-white px-3 py-1.5 text-xs font-medium text-[#374151] hover:bg-[#f9fafb] cursor-pointer"
+                      className={`rounded-md border border-[#e5e7eb] bg-white px-3 py-1.5 text-xs font-medium ${canReview ? "text-[#374151] hover:bg-[#f9fafb] cursor-pointer" : "cursor-not-allowed text-[#9ca3af]"}`}
                     >
-                      Dismiss
+                      {canReview ? "Dismiss" : "🔒 Dismiss"}
                     </button>
                     <button
                       type="button"
+                      disabled={!canReview}
+                      title={canReview ? "Accept suggestion" : reviewLockNote}
                       onClick={() => handleCardAction(card.id, "Accepted")}
-                      className="flex items-center gap-1.5 rounded-md bg-[#173d35] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#245448] cursor-pointer"
+                      className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium ${canReview ? "bg-[#173d35] text-white hover:bg-[#245448] cursor-pointer" : "cursor-not-allowed bg-[#e5e7eb] text-[#707871]"}`}
                     >
                       <i className="ti ti-check text-xs" />
                       <span>
-                        {card.status === "Accepted" ? "Accepted" : "Accept suggestion"}
+                        {canReview
+                          ? card.status === "Accepted"
+                            ? "Accepted"
+                            : "Accept suggestion"
+                          : "🔒 Accept suggestion"}
                       </span>
                     </button>
                   </div>

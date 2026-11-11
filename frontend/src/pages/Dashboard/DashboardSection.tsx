@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { apiRequest } from "../../lib/api";
+import { useWorkspaceData } from "../../context/WorkspaceDataContext";
+import { getCurrentUser } from "../../lib/roles";
 
 const vector10 =
   "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><line x1='12' y1='5' x2='12' y2='19'/><line x1='5' y1='12' x2='19' y2='12'/></svg>";
@@ -175,78 +176,63 @@ const getGreeting = () => {
 
 export const DashboardSection = () => {
   const navigate = useNavigate();
-  const user = { name: "Maya" };
+  const user = getCurrentUser();
   const greeting = getGreeting();
   const [newReviewOpen, setNewReviewOpen] = useState(false);
   const [showAllReviews, setShowAllReviews] = useState(false);
-  const [liveReviews, setLiveReviews] = useState<Review[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [summaryValues, setSummaryValues] = useState({
-    totalReviews: "0",
-    pendingReviews: "0",
-    issuesFound: "0",
-  });
+  const { dashboardData, isInitialLoaded, ensureInitialLoad } = useWorkspaceData();
 
   useEffect(() => {
-    let active = true;
-    apiRequest<{
-      reviews: Array<{
-        id: string;
-        title: string;
-        content_type: string;
-        version: string;
-        creator_name: string;
-        creator_initials: string;
-        status: string;
-        created_at: string;
-      }>;
-      openIssuesCount: number;
-    }>("/api/dashboard", { method: "GET" })
-      .then((data) => {
-        if (!active) return;
-        const mappedReviews = data.reviews.map((review) => ({
-          id: review.id,
-          name: review.title,
-          type: review.content_type,
-          version: review.version,
-          initials: review.creator_initials,
-          creator: review.creator_name,
-          status: review.status,
-          statusClass:
-            review.status === "Approved" ? "bg-[#dce6de]" : review.status === "In review" ? "bg-[#f5eedc]" : "bg-[#f8f9f6]",
-          statusTextClass:
-            review.status === "Approved" ? "text-[#173d35]" : review.status === "In review" ? "text-[#8a642b]" : "text-[#707871]",
-          date: new Date(review.created_at).toLocaleDateString("en-GB", {
-            day: "2-digit",
-            month: "short",
-            year: "numeric",
-          }),
-          icon: arrowUpRight,
-        }));
-        setLiveReviews(mappedReviews);
-        const pending = data.reviews.filter((review) => review.status !== "Approved").length;
-        setSummaryValues({
-          totalReviews: String(data.reviews.length),
-          pendingReviews: String(pending).padStart(2, "0"),
-          issuesFound: String(data.openIssuesCount).padStart(2, "0"),
-        });
-      })
-      .catch(() => {
-        if (!active) return;
-        setLiveReviews(reviews);
-        setSummaryValues({
-          totalReviews: "24",
-          pendingReviews: "03",
-          issuesFound: "07",
-        });
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
+    if (!isInitialLoaded) {
+      void ensureInitialLoad();
+    }
+  }, [ensureInitialLoad, isInitialLoaded]);
+
+  const liveReviews: Review[] = dashboardData
+    ? dashboardData.reviews.map((review) => ({
+        id: review.id,
+        name: review.title,
+        type: review.content_type,
+        version: review.version,
+        initials: review.creator_initials,
+        creator: review.creator_name,
+        status: review.status,
+        statusClass:
+          review.status === "Approved"
+            ? "bg-[#dce6de]"
+            : review.status === "In review"
+              ? "bg-[#f5eedc]"
+              : "bg-[#f8f9f6]",
+        statusTextClass:
+          review.status === "Approved"
+            ? "text-[#173d35]"
+            : review.status === "In review"
+              ? "text-[#8a642b]"
+              : "text-[#707871]",
+        date: new Date(review.created_at).toLocaleDateString("en-GB", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        }),
+        icon: arrowUpRight,
+      }))
+    : isInitialLoaded
+      ? reviews
+      : [];
+
+  const summaryValues = dashboardData
+    ? {
+        totalReviews: String(dashboardData.reviews.length),
+        pendingReviews: String(
+          dashboardData.reviews.filter((review) => review.status !== "Approved").length
+        ).padStart(2, "0"),
+        issuesFound: String(dashboardData.openIssuesCount).padStart(2, "0"),
+      }
+    : isInitialLoaded
+      ? { totalReviews: "24", pendingReviews: "03", issuesFound: "07" }
+      : { totalReviews: "0", pendingReviews: "0", issuesFound: "0" };
+
+  const loading = !isInitialLoaded && !dashboardData;
 
   const displayedReviews = showAllReviews ? liveReviews : liveReviews.slice(0, 5);
   const inReviewArrowIndex = (() => {
@@ -280,7 +266,7 @@ export const DashboardSection = () => {
               id="workspace-heading"
               className="relative flex-1 [font-family:'Inter-Medium',Helvetica] font-medium text-[#173d35] text-3xl tracking-[-1.00px] leading-[normal]"
             >
-              {greeting}, {user.name || "Maya"}.
+              {greeting}, {user.name.split(" ")[0]}.
             </h1>
             <button
               type="button"
@@ -305,6 +291,7 @@ export const DashboardSection = () => {
             stand.
           </p>
         </section>
+        <div data-tour="dashboard-overview" className="flex w-full flex-col gap-5">
         <section
           aria-label="Workspace summary"
           className="items-start gap-5 self-stretch w-full flex-[0_0_auto] overflow-hidden flex relative"
@@ -503,6 +490,7 @@ export const DashboardSection = () => {
             ))}
           </div>
         </section>
+        </div>
       </div>
       {newReviewOpen && (
         <div

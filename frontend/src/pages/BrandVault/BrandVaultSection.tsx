@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { apiRequest } from "../../lib/api";
+import { useWorkspaceData, type BrandVaultData } from "../../context/WorkspaceDataContext";
+import { getCurrentUser } from "../../lib/roles";
+import { RoleAccessPill, brandVaultAccessMessage, adminActionLockNote } from "../../components/RoleAccessPill";
 
 // Screenshot ke exact Brand Vault Icons
 const vectorPlus =
@@ -29,33 +32,7 @@ type Category = {
   entries: Entry[];
 };
 
-type BrandVaultResponse = {
-  rules: Array<{
-    rule_code: string;
-    category?: string;
-    title: string;
-    description?: string;
-    version: string;
-    approved_by: string;
-    status: string;
-  }>;
-  facts: Array<{
-    fact_code: string;
-    title: string;
-    claim_statement: string;
-    description?: string;
-    version: string;
-    approved_by: string;
-    status: string;
-  }>;
-  assets: Array<{
-    asset_code: string;
-    title: string;
-    description?: string;
-    version: string;
-    updated_at?: string;
-  }>;
-};
+type BrandVaultResponse = BrandVaultData;
 
 const formatVaultDate = (dateValue?: string) => {
   if (!dateValue) return "recently";
@@ -116,17 +93,34 @@ const mapVaultData = (data: BrandVaultResponse): Category[] => [
 ];
 
 export const BrandVaultSection = () => {
+  const user = getCurrentUser();
+  const isAdmin = user.role === "admin";
+  const vaultAccess = brandVaultAccessMessage(user.role);
+  const vaultLockNote = adminActionLockNote(user.role);
+  const { brandVaultData, isInitialLoaded, ensureInitialLoad, refreshWorkspaceAfterActivity } =
+    useWorkspaceData();
   const [query, setQuery] = useState("");
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState<Entry | null>(null);
-  const [vaultCategories, setVaultCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
   const [entryType, setEntryType] = useState<"rule" | "fact" | "asset">("rule");
   const [entryTitle, setEntryTitle] = useState("");
   const [entryDescription, setEntryDescription] = useState("");
   const [entryCategory, setEntryCategory] = useState("Terminology");
   const [entryCode, setEntryCode] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!isInitialLoaded) {
+      void ensureInitialLoad();
+    }
+  }, [ensureInitialLoad, isInitialLoaded]);
+
+  const vaultCategories = useMemo(
+    () => (brandVaultData ? mapVaultData(brandVaultData) : []),
+    [brandVaultData]
+  );
+  const loading = !isInitialLoaded && !brandVaultData;
+
   const latestUpdatedAt = useMemo(
     () =>
       vaultCategories
@@ -136,25 +130,6 @@ export const BrandVaultSection = () => {
         .pop(),
     [vaultCategories]
   );
-
-  useEffect(() => {
-    let active = true;
-    apiRequest<BrandVaultResponse>("/api/brand-vault", { method: "GET" })
-      .then((data) => {
-        if (!active) return;
-        setVaultCategories(mapVaultData(data));
-      })
-      .catch((error) => {
-        console.error("Unable to load Brand Vault", error);
-        if (active) setVaultCategories([]);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
 
   const filteredCategories = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -235,8 +210,7 @@ export const BrandVaultSection = () => {
                 description: entryDescription,
               },
       });
-      const refreshed = await apiRequest<BrandVaultResponse>("/api/brand-vault", { method: "GET" });
-      setVaultCategories(mapVaultData(refreshed));
+      await refreshWorkspaceAfterActivity();
       setShowAddDialog(false);
     } catch (error) {
       console.error("Unable to add Brand Vault entry", error);
@@ -247,7 +221,10 @@ export const BrandVaultSection = () => {
 
   return (
     <main className="flex flex-col items-start relative flex-1 grow bg-[#f8f9f6]">
-      <div className="gap-7 pt-[34px] pb-9 px-10 flex flex-col items-start relative self-stretch w-full flex-[0_0_auto]">
+      <div
+        data-tour="brand-vault-management"
+        className="gap-7 pt-[34px] pb-9 px-10 flex flex-col items-start relative self-stretch w-full flex-[0_0_auto]"
+      >
         <section
           aria-labelledby="brand-vault-title"
           className="gap-2.5 flex flex-col items-start relative self-stretch w-full flex-[0_0_auto]"
@@ -265,8 +242,10 @@ export const BrandVaultSection = () => {
             <button
               type="button"
               data-tour="add-entry-btn"
+              disabled={!isAdmin}
+              title={isAdmin ? "Add a Brand Vault entry" : vaultLockNote}
               onClick={() => openAddDialog()}
-              className="all-unset box-border inline-flex h-10 items-center justify-center gap-2 px-4 py-0 relative flex-[0_0_auto] bg-[#173d35] rounded-md overflow-hidden border border-solid hover:bg-[#245448] cursor-pointer"
+              className={`all-unset box-border inline-flex h-10 items-center justify-center gap-2 px-4 py-0 relative flex-[0_0_auto] rounded-md overflow-hidden border border-solid ${isAdmin ? "bg-[#173d35] hover:bg-[#245448] cursor-pointer" : "bg-[#e5e7eb] text-[#707871] cursor-not-allowed"}`}
             >
               <div className="relative w-4 h-4">
                 <img
@@ -275,11 +254,12 @@ export const BrandVaultSection = () => {
                   src={vectorPlus}
                 />
               </div>
-              <span className="text-white text-[13px] leading-[normal] relative w-fit [font-family:'Inter-SemiBold',Helvetica] font-semibold tracking-[0]">
-                Add entry
+              <span className={`${isAdmin ? "text-white" : "text-[#707871]"} text-[13px] leading-[normal] relative w-fit [font-family:'Inter-SemiBold',Helvetica] font-semibold tracking-[0]`}>
+                {isAdmin ? "Add entry" : "🔒 Add entry"}
               </span>
             </button>
           </div>
+          <RoleAccessPill variant={vaultAccess.variant} message={vaultAccess.message} />
           <p className="self-stretch [font-family:'Inter-Regular',Helvetica] font-normal text-[#707871] text-sm leading-[21px] relative tracking-[0]">
             Approved knowledge for DemoBrand Co. Every review starts with the sources
             you trust.
@@ -346,6 +326,8 @@ export const BrandVaultSection = () => {
                   </div>
                   <button
                     type="button"
+                    disabled={!isAdmin}
+                    title={isAdmin ? "Add a Brand Vault entry" : vaultLockNote}
                     onClick={() =>
                       openAddDialog(
                         category.title === "Approved Facts and Claims"
@@ -362,9 +344,9 @@ export const BrandVaultSection = () => {
                               : "Brand Logos and Assets"
                       )
                     }
-                    className="w-fit [font-family:'Inter-SemiBold',Helvetica] font-semibold text-[#173d35] text-xs leading-[18px] whitespace-nowrap relative tracking-[0] hover:underline cursor-pointer"
+                    className={`w-fit [font-family:'Inter-SemiBold',Helvetica] font-semibold text-xs leading-[18px] whitespace-nowrap relative tracking-[0] ${isAdmin ? "text-[#173d35] hover:underline cursor-pointer" : "text-[#707871] cursor-not-allowed"}`}
                   >
-                    + Add
+                    {isAdmin ? "+ Add" : "🔒 Add"}
                   </button>
                 </div>
                 <p className="self-stretch [font-family:'Inter-Regular',Helvetica] font-normal text-[#707871] text-xs leading-[18px] relative tracking-[0]">
@@ -538,7 +520,23 @@ export const BrandVaultSection = () => {
             <p className="mt-3 [font-family:'Inter-Regular',Helvetica] text-xs leading-[18px] text-[#707871]">
               {selectedEntry.metadata}
             </p>
-            <div className="mt-5 flex justify-end">
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={!isAdmin}
+                title={isAdmin ? "Edit this entry" : vaultLockNote}
+                className={`rounded-md border px-4 py-2 [font-family:'Inter-SemiBold',Helvetica] text-xs font-semibold ${isAdmin ? "border-[#173d35] text-[#173d35]" : "cursor-not-allowed border-[#e5e7eb] text-[#707871]"}`}
+              >
+                {isAdmin ? "Edit" : "🔒 Edit"}
+              </button>
+              <button
+                type="button"
+                disabled={!isAdmin}
+                title={isAdmin ? "Delete this entry" : vaultLockNote}
+                className={`rounded-md border px-4 py-2 [font-family:'Inter-SemiBold',Helvetica] text-xs font-semibold ${isAdmin ? "border-[#b91c1c] text-[#b91c1c]" : "cursor-not-allowed border-[#e5e7eb] text-[#707871]"}`}
+              >
+                {isAdmin ? "Delete" : "🔒 Delete"}
+              </button>
               <button
                 type="button"
                 onClick={() => setSelectedEntry(null)}

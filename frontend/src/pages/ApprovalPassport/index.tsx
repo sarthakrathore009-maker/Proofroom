@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Sidebar } from "../../components/Sidebar";
 import { TopHeader } from "../../components/TopHeader";
-import { apiRequest } from "../../lib/api";
+import { useWorkspaceData } from "../../context/WorkspaceDataContext";
+import { getCurrentUser } from "../../lib/roles";
+import { RoleAccessPill, approvalAccessMessage, reviewerActionLockNote } from "../../components/RoleAccessPill";
 
 const resolvedChanges = [
   {
@@ -62,6 +64,18 @@ export const ApprovalPassport = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const reviewId = searchParams.get("reviewId");
+  const user = getCurrentUser();
+  const canApprove = user.role === "reviewer";
+  const approvalAccess = approvalAccessMessage(user.role);
+  const approvalLockNote = reviewerActionLockNote(user.role);
+  const {
+    getReviewDetail,
+    reviewDetailsById,
+    latestReviewDetail,
+    ensureInitialLoad,
+    isInitialLoaded,
+    refreshWorkspaceAfterActivity,
+  } = useWorkspaceData();
   const [status, setStatus] = useState<"Approved" | "Changes Requested">("Approved");
   const [contentTitle, setContentTitle] = useState("A simpler clean — launch email");
   const [contentType, setContentType] = useState("Email campaign");
@@ -81,66 +95,63 @@ export const ApprovalPassport = () => {
   const [dynamicEvidenceRefs, setDynamicEvidenceRefs] = useState(evidenceRefs);
 
   useEffect(() => {
+    if (!isInitialLoaded) {
+      void ensureInitialLoad();
+    }
+  }, [ensureInitialLoad, isInitialLoaded]);
+
+  useEffect(() => {
+    const applyData = (data: Awaited<ReturnType<typeof getReviewDetail>>) => {
+      if (!data?.review) return;
+      const passport = data.passport;
+      setContentTitle(data.review.title);
+      setContentType(data.review.content_type);
+      setCreatorName(data.review.creator_name);
+      setReviewCode(data.review.review_code);
+      setSubmittedContent(data.review.submitted_body_text ?? data.review.body_text);
+      setApprovedContent(data.review.body_text);
+      if (passport) {
+        setApprovedVersion(passport.approved_version);
+        setReviewerName(passport.reviewer_name);
+        setPassportId(passport.passport_code);
+        setStatus(passport.is_valid ? "Approved" : "Changes Requested");
+        setApprovalDate(formatApprovalDate(passport.created_at ?? data.review.created_at));
+      } else {
+        setApprovalDate(formatApprovalDate(data.review.created_at));
+      }
+      if (passport?.resolved_changes?.length) {
+        setDynamicResolvedChanges(passport.resolved_changes);
+      }
+      if (passport?.evidence_refs?.length) {
+        setDynamicEvidenceRefs(
+          passport.evidence_refs.map((reference) => ({
+            title: reference.title,
+            meta: reference.source,
+          }))
+        );
+      }
+    };
+
+    const cached = reviewId ? reviewDetailsById[reviewId] : latestReviewDetail;
+    if (cached?.review) {
+      applyData(cached);
+      return;
+    }
+
     let active = true;
-    apiRequest<{
-      review: {
-        id: string;
-        title: string;
-        content_type: string;
-        body_text: string;
-        submitted_body_text?: string;
-        created_at?: string;
-        version: string;
-        review_code: string;
-        creator_name: string;
-      } | null;
-      passport: {
-        passport_code: string;
-        approved_version: string;
-        reviewer_name: string;
-        created_at?: string;
-        is_valid: boolean;
-        evidence_refs: Array<{ title: string; source: string }>;
-        resolved_changes: Array<{ title: string; detail: string; code: string }>;
-      } | null;
-    }>(reviewId ? `/api/reviews/${encodeURIComponent(reviewId)}` : "/api/reviews/latest", { method: "GET" })
-      .then((data) => {
-        if (!active || !data.review) return;
-        const passport = data.passport;
-        setContentTitle(data.review.title);
-        setContentType(data.review.content_type);
-        setCreatorName(data.review.creator_name);
-        setReviewCode(data.review.review_code);
-        setSubmittedContent(data.review.submitted_body_text ?? data.review.body_text);
-        setApprovedContent(data.review.body_text);
-        if (passport) {
-          setApprovedVersion(passport.approved_version);
-          setReviewerName(passport.reviewer_name);
-          setPassportId(passport.passport_code);
-          setStatus(passport.is_valid ? "Approved" : "Changes Requested");
-          setApprovalDate(formatApprovalDate(passport.created_at ?? data.review.created_at));
-        } else {
-          setApprovalDate(formatApprovalDate(data.review.created_at));
-        }
-        if (passport?.resolved_changes?.length) {
-          setDynamicResolvedChanges(passport.resolved_changes);
-        }
-        if (passport?.evidence_refs?.length) {
-          setDynamicEvidenceRefs(
-            passport.evidence_refs.map((reference) => ({
-              title: reference.title,
-              meta: reference.source,
-            }))
-          );
-        }
-      })
-      .catch(() => {
-        // Keep the static passport values when no approved review is available.
-      });
+    void getReviewDetail(reviewId).then((data) => {
+      if (active) applyData(data);
+    });
     return () => {
       active = false;
     };
-  }, [reviewId]);
+  }, [getReviewDetail, latestReviewDetail, reviewId, reviewDetailsById]);
+
+  const handleDecision = async (next: "Approved" | "Changes Requested") => {
+    if (!canApprove) return;
+    setStatus(next);
+    await refreshWorkspaceAfterActivity();
+  };
 
   const handleDownloadPassport = () => {
     const printWindow = window.open("", "_blank", "width=900,height=1100");
