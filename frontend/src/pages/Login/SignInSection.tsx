@@ -1,5 +1,12 @@
 import { type FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { clearTourState, startProductTour } from "../../components/ProductTour";
+import {
+  PERSONAS,
+  firstRouteForRole,
+  saveCurrentUser,
+  type UserRole,
+} from "../../lib/roles";
 
 // Screenshot ke exact icons (Eye-off, White Checkmark, aur White Right Arrow)
 const vector3 =
@@ -9,9 +16,16 @@ const vector4 =
 const vector5 =
   "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><line x1='5' y1='12' x2='19' y2='12'/><polyline points='12 5 19 12 12 19'/></svg>";
 
+const roleCardCopy: Record<UserRole, string> = {
+  admin: "Brand Vault & Rules",
+  creator: "Submit & Revise Content",
+  reviewer: "Audit & Approve Releases",
+};
+
 export const SignInSection = () => {
-  const demoEmail = "demo.review@proofroom.co";
   const demoPassword = "password123";
+  const [selectedRole, setSelectedRole] = useState<UserRole>("admin");
+  const demoEmail = PERSONAS[selectedRole].email;
   const [email, setEmail] = useState(demoEmail);
   const [password, setPassword] = useState(demoPassword);
   const [keepSignedIn, setKeepSignedIn] = useState(true);
@@ -20,27 +34,45 @@ export const SignInSection = () => {
 
   const navigate = useNavigate();
 
-  const completeLogin = () => {
-    sessionStorage.setItem("proofroom_tour_active", "true");
-    navigate("/dashboard");
+  const completeLogin = (role: UserRole) => {
+    saveCurrentUser(role);
+    clearTourState();
+    startProductTour();
+    navigate(firstRouteForRole(role));
   };
 
-  const handleDemoLogin = () => {
-    setEmail(demoEmail);
+  const selectRole = (role: UserRole) => {
+    setSelectedRole(role);
+    setEmail(PERSONAS[role].email);
     setPassword(demoPassword);
     setError("");
-    completeLogin();
+  };
+
+  const handleDemoLogin = (role: UserRole) => {
+    selectRole(role);
+    completeLogin(role);
   };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     const normalizedEmail = email.trim().toLowerCase();
-    if (
-      (normalizedEmail === demoEmail || normalizedEmail === "demo") &&
-      password === demoPassword
-    ) {
+    const matchedRole = (Object.keys(PERSONAS) as UserRole[]).find(
+      (candidate) => PERSONAS[candidate].email === normalizedEmail
+    );
+    if (matchedRole && password === demoPassword) {
       setError("");
-      completeLogin();
+      completeLogin(matchedRole);
+      return;
+    }
+    if (password === demoPassword && Object.values(PERSONAS).some((p) => p.email === normalizedEmail)) {
+      setError("");
+      completeLogin(selectedRole);
+      return;
+    }
+    // Allow Sign in with currently selected role when demo password matches prefilled email
+    if (password === demoPassword && normalizedEmail === PERSONAS[selectedRole].email) {
+      setError("");
+      completeLogin(selectedRole);
       return;
     }
     setError("Please use the official demo credentials provided.");
@@ -70,17 +102,45 @@ export const SignInSection = () => {
             Your next confident review starts here.
           </p>
         </div>
-        <div className="flex items-center justify-between gap-3 self-stretch rounded-md border border-[#dce6de] bg-[#f0f5f1] px-3.5 py-3">
-          <span className="text-xs font-medium leading-[18px] text-[#173d35]">
-            ⚡ Quick Demo: Use pre-filled evaluator credentials
-          </span>
-          <button
-            type="button"
-            onClick={handleDemoLogin}
-            className="shrink-0 rounded-md bg-[#173d35] px-3 py-2 text-[11px] font-semibold text-white hover:bg-[#245448] cursor-pointer"
-          >
-            Demo Login as Evaluator
-          </button>
+        <div className="self-stretch rounded-md border border-[#dce6de] bg-[#f0f5f1] p-3.5">
+          <p className="mb-3 text-xs font-medium leading-[18px] text-[#173d35]">
+            ⚡ Quick Demo: Select a role to sign in with pre-filled credentials
+          </p>
+          <div className="mb-2 flex gap-1.5" aria-label="Select demo role">
+            {(Object.keys(PERSONAS) as UserRole[]).map((role) => (
+              <button
+                key={role}
+                type="button"
+                aria-pressed={selectedRole === role}
+                onClick={() => selectRole(role)}
+                className={`rounded-full px-2.5 py-1 text-[10px] font-semibold capitalize ${selectedRole === role ? "bg-[#173d35] text-white" : "bg-white text-[#707871]"}`}
+              >
+                {role}
+              </button>
+            ))}
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {(Object.keys(PERSONAS) as UserRole[]).map((role) => {
+              const persona = PERSONAS[role];
+              const selected = role === selectedRole;
+              return (
+                <button
+                  key={role}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => handleDemoLogin(role)}
+                  className={`rounded-md border px-2.5 py-2 text-left ${selected ? "border-[#173d35] bg-[#173d35] text-white" : "border-[#dce6de] bg-white text-[#173d35]"}`}
+                >
+                  <span className="block text-[11px] font-semibold">
+                    Demo Login as {role[0].toUpperCase() + role.slice(1)}
+                  </span>
+                  <span className={`mt-1 block text-[10px] ${selected ? "text-[#dce6de]" : "text-[#707871]"}`}>
+                    {persona.name} — {roleCardCopy[role]}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
         {error && (
           <div
@@ -102,7 +162,7 @@ export const SignInSection = () => {
               className="h-12 px-3.5 py-0 relative self-stretch w-full bg-white rounded-md overflow-hidden border border-solid border-[#dfe3da] [font-family:'Inter-Regular',Helvetica] font-normal text-[#252b29] text-sm leading-[21px] whitespace-nowrap tracking-[0]"
               id="work-email"
               name="email"
-              placeholder="maya@demobrandhome.co"
+              placeholder={PERSONAS[selectedRole].email}
               type="text"
               inputMode="email"
               autoComplete="email"
