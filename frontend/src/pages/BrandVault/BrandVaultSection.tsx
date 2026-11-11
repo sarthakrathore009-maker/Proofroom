@@ -24,6 +24,10 @@ type Entry = {
   metadata: string;
   icon?: string;
   textIcon?: string;
+  sourceValidity: "Active" | "Expired" | "Superseded";
+  expiryDate: string;
+  audienceScope: string;
+  productScope: string;
 };
 
 type Category = {
@@ -45,6 +49,22 @@ const formatVaultDate = (dateValue?: string) => {
   });
 };
 
+const sourceMetadata = (source: {
+  source_validity?: "Active" | "Expired" | "Superseded";
+  expiry_date?: string;
+  audience_scope?: string;
+  product_scope?: string;
+}, fallbackProduct: string) => {
+  const expiryDate = source.expiry_date || "2026-12-31";
+  const expired = new Date(expiryDate) < new Date();
+  return {
+    sourceValidity: source.source_validity || (expired ? "Expired" : "Active"),
+    expiryDate,
+    audienceScope: source.audience_scope || "All Consumers",
+    productScope: source.product_scope || fallbackProduct,
+  } as const;
+};
+
 const mapVaultData = (data: BrandVaultResponse): Category[] => [
   {
     title: "Brand Guidelines",
@@ -52,6 +72,7 @@ const mapVaultData = (data: BrandVaultResponse): Category[] => [
     entries: data.rules
       .filter((rule) => !rule.category?.toLowerCase().includes("terminology"))
       .map((rule) => ({
+        ...sourceMetadata(rule, "Proofroom Core v2"),
         title: rule.title,
         description: rule.description ?? "",
         metadata: `${rule.rule_code} · ${rule.version || "v1.0"} · Approved by ${rule.approved_by || "Elena Ruiz"}`,
@@ -62,6 +83,7 @@ const mapVaultData = (data: BrandVaultResponse): Category[] => [
     title: "Approved Facts and Claims",
     description: "Evidence-led statements your team can use.",
     entries: data.facts.map((fact) => ({
+      ...sourceMetadata(fact, fact.fact_code === "F-014" ? "Packaging Spec F-014" : "Proofroom Core v2"),
       title: fact.title,
       description: fact.claim_statement || fact.description || "",
       metadata: `${fact.fact_code} · ${fact.version || "v1.0"} · Approved by ${fact.approved_by || "Nina Patel"}`,
@@ -74,6 +96,7 @@ const mapVaultData = (data: BrandVaultResponse): Category[] => [
     entries: data.rules
       .filter((rule) => rule.category?.toLowerCase().includes("terminology"))
       .map((rule) => ({
+        ...sourceMetadata(rule, "Proofroom Core v2"),
         title: rule.title,
         description: rule.description ?? "",
         metadata: `${rule.rule_code} · ${rule.version || "v1.0"} · Approved by ${rule.approved_by || "Elena Ruiz"}`,
@@ -84,6 +107,7 @@ const mapVaultData = (data: BrandVaultResponse): Category[] => [
     title: "Brand Logos and Assets",
     description: "Ready-to-use, approved brand essentials.",
     entries: data.assets.map((asset) => ({
+      ...sourceMetadata(asset, asset.title),
       title: asset.title,
       description: asset.description ?? "",
       metadata: `${asset.asset_code} · ${asset.version || "v1.0"} · Updated ${formatVaultDate(asset.updated_at)}`,
@@ -387,6 +411,30 @@ export const BrandVaultSection = () => {
                     <p className="self-stretch [font-family:'Inter-Regular',Helvetica] font-normal text-[#707871] text-[10px] leading-[15px] relative tracking-[0]">
                       {entry.metadata}
                     </p>
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-semibold ${
+                        entry.sourceValidity === "Active"
+                          ? "border-[#bbf7d0] bg-[#f0fdf4] text-[#15803d]"
+                          : entry.sourceValidity === "Expired"
+                            ? "border-[#fecaca] bg-[#fef2f2] text-[#dc2626]"
+                            : "border-[#fde68a] bg-[#fffbeb] text-[#92400e]"
+                      }`}>
+                        Source Validity: {entry.sourceValidity}
+                      </span>
+                      <span className={`rounded-full border px-1.5 py-0.5 text-[9px] ${
+                        entry.sourceValidity === "Expired"
+                          ? "border-[#fecaca] bg-[#fef2f2] text-[#dc2626]"
+                          : "border-[#e5e7eb] bg-[#f8f9f6] text-[#6b7280]"
+                      }`}>
+                        {entry.sourceValidity === "Expired" ? "Expired" : `Valid until ${formatVaultDate(entry.expiryDate)}`}
+                      </span>
+                      <span className="rounded-full border border-[#e5e7eb] bg-[#f8f9f6] px-1.5 py-0.5 text-[9px] text-[#6b7280]">
+                        Audience: {entry.audienceScope}
+                      </span>
+                      <span className="rounded-full border border-[#e5e7eb] bg-[#f8f9f6] px-1.5 py-0.5 text-[9px] text-[#6b7280]">
+                        Product: {entry.productScope}
+                      </span>
+                    </div>
                   </div>
                   <button
                     type="button"

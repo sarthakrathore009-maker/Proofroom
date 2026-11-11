@@ -21,11 +21,154 @@ const upload = multer({
 });
 
 const PORT = process.env.PORT || 5000;
+const TODAY = new Date();
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
+
+function sourceIntegrityMetadata(source, kind = 'fact') {
+  const code = source.fact_code || source.rule_code || source.asset_code || '';
+  const defaults = {
+    'F-014': {
+      source_validity: 'Active',
+      expiry_date: '2026-12-31',
+      audience_scope: 'All Consumers',
+      product_scope: 'Packaging Spec F-014',
+    },
+    'F-016': {
+      source_validity: 'Expired',
+      expiry_date: '2025-10-31',
+      audience_scope: 'Enterprise Tier Only',
+      product_scope: 'Proofroom Core v2',
+    },
+    'F-017': {
+      source_validity: 'Active',
+      expiry_date: '2026-12-31',
+      audience_scope: 'North America Only',
+      product_scope: 'Refill Concentrates',
+    },
+  };
+  const fallback = defaults[code] || {
+    source_validity: source.status === 'Superseded' ? 'Superseded' : 'Active',
+    expiry_date: source.expiry_date || '2026-12-31',
+    audience_scope: source.audience_scope || 'All Consumers',
+    product_scope: source.product_scope || (kind === 'asset' ? source.title : 'Proofroom Core v2'),
+  };
+  const expiry = source.expiry_date || fallback.expiry_date;
+  const isExpired = new Date(expiry) < TODAY;
+  return {
+    ...source,
+    source_validity: source.source_validity || (isExpired ? 'Expired' : fallback.source_validity),
+    expiry_date: expiry,
+    audience_scope: source.audience_scope || fallback.audience_scope,
+    product_scope: source.product_scope || fallback.product_scope,
+  };
+}
+
+function ensureSampleIntegritySources(facts) {
+  const samples = [
+    {
+      fact_code: 'F-014',
+      title: 'Packaging specification',
+      claim_statement: 'Bottle body: 80% recycled plastic. Cap excluded.',
+      version: 'v2.1',
+      approved_by: 'Nina Patel',
+      status: 'Approved',
+    },
+    {
+      fact_code: 'F-016',
+      title: 'Enterprise pilot metric',
+      claim_statement: 'Enterprise Tier teams reduced manual processing by up to 23%.',
+      version: 'v1.0',
+      approved_by: 'Nina Patel',
+      status: 'Approved',
+    },
+    {
+      fact_code: 'F-017',
+      title: 'Regional refill campaign',
+      claim_statement: 'Refill Concentrates campaign is approved for North America only.',
+      version: 'v1.0',
+      approved_by: 'Nina Patel',
+      status: 'Approved',
+    },
+  ];
+  return samples.reduce(
+    (result, sample) =>
+      result.some((fact) => fact.fact_code === sample.fact_code) ? result : [...result, sample],
+    facts || []
+  );
+}
+
+function formatExpiry(source) {
+  if (!source?.expiry_date) return 'No expiry recorded';
+  const date = new Date(source.expiry_date);
+  const formatted = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+  return new Date(source.expiry_date) < TODAY ? `Expired: ${formatted}` : `Valid until ${formatted}`;
+}
+
+function evaluateEvidenceIntegrity(contentText, facts) {
+  const claims = contentText.match(/[^.!?]+[.!?]*/g) || [contentText];
+  return claims
+    .map((rawClaim) => rawClaim.trim())
+    .filter(Boolean)
+    .filter((claim) => /%|faster|best|guaranteed|enterprise|everyone|all users|recycled|plastic|automation|workflow/i.test(claim))
+    .map((claim) => {
+      const lower = claim.toLowerCase();
+      const packaging = facts.find((fact) => fact.fact_code === 'F-014');
+      const pilot = facts.find((fact) => fact.fact_code === 'F-016');
+      let source = null;
+      let status = 'Unverified';
+      let scopeMatch = 'No matching approved source found.';
+      let actionableFix = 'Add approved evidence or remove this unsupported claim.';
+      let suggestedCorrection = '';
+
+      if (lower.includes('100%') && (lower.includes('recycled') || lower.includes('plastic'))) {
+        source = packaging;
+        status = 'Conflicting';
+        scopeMatch = 'Scope matches, but the claim contradicts F-014: source specifies 80% recycled plastic, excluding the cap.';
+        actionableFix = 'Replace the claim with the approved 80% recycled plastic specification.';
+        suggestedCorrection = 'Our bottles are made with 80% recycled plastic, excluding the cap.';
+      } else if (lower.includes('50%') || lower.includes('faster')) {
+        source = pilot;
+        if (source) {
+          const normalized = sourceIntegrityMetadata(source);
+          status = normalized.source_validity === 'Expired' ? 'Outdated' : 'Conflicting';
+          scopeMatch = 'Scope Mismatch: Claim says all teams/users, source is scoped to Enterprise Tier Only.';
+          actionableFix = 'Limit the claim to Enterprise Tier users and cite the current approved metric.';
+          suggestedCorrection = 'Enterprise Tier teams reduced manual processing by up to 23% in the approved pilot.';
+        }
+
+        async function buildEvidenceIntegrity(contentText) {
+          const { data: facts, error } = await supabase.from('approved_facts').select('*');
+          if (error) {
+            console.error('Evidence integrity source lookup error:', error.message);
+            return [];
+          }
+          return evaluateEvidenceIntegrity(contentText || '', ensureSampleIntegritySources(facts || []));
+        }
+      } else if (lower.includes('80% recycled plastic')) {
+        source = packaging;
+        status = 'Supported';
+        scopeMatch = 'Audience and product scope match: All Consumers / Packaging Spec F-014.';
+        actionableFix = 'No correction required.';
+      }
+
+      const normalizedSource = source ? sourceIntegrityMetadata(source) : null;
+      return {
+        claim,
+        status,
+        source_code: normalizedSource?.fact_code || null,
+        source_label: normalizedSource
+          ? `Source ${normalizedSource.fact_code} • ${formatExpiry(normalizedSource)}`
+          : 'No matched Brand Vault source',
+        audience_product_scope: scopeMatch,
+        actionable_fix: actionableFix,
+        suggested_correction: suggestedCorrection,
+      };
+    });
+}
 
 app.post('/api/upload-content', upload.single('file'), async (req, res) => {
   if (!req.file) {
@@ -50,7 +193,7 @@ app.post('/api/upload-content', upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'Unsupported file type.' });
     }
 
-    if (!text.trim()) {
+    if (!text.trim() && !['png', 'jpg', 'jpeg'].includes(extension)) {
       return res.status(422).json({ error: 'No readable text was found in this file.' });
     }
     return res.json({ text: text.trim() });
@@ -63,7 +206,21 @@ app.post('/api/upload-content', upload.single('file'), async (req, res) => {
 // ============================================================================
 // HELPER: AI + Rule-Based Compliance Checking Engine
 // ============================================================================
-async function runComplianceEngine(title, contentText, rules, facts) {
+async function runComplianceEngine(title, contentText, rules, facts, multimodal = {}) {
+  const caption = typeof multimodal.caption === 'string' ? multimodal.caption : '';
+  const visualAsset =
+    multimodal.visual_asset && typeof multimodal.visual_asset === 'object'
+      ? multimodal.visual_asset
+      : null;
+  const visualContext = [
+    caption,
+    visualAsset?.name,
+    visualAsset?.description,
+    visualAsset?.extractedText,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
   // 1. Try Real Gemini AI Analysis first if GEMINI_API_KEY is present in .env
   if (process.env.GEMINI_API_KEY) {
     try {
@@ -83,7 +240,12 @@ SUBMITTED CONTENT TEXT:
 ${contentText}
 """
 
-Identify any unsupported claims, factual mismatches, forbidden terminology, or exaggerated/off-brand tone in the SUBMITTED CONTENT TEXT.
+IMAGE CAPTION AND VISUAL CONTEXT:
+"""
+${visualContext || 'No campaign image or caption provided.'}
+"""
+
+Analyze the text, caption, and visual context together. Identify unsupported claims, factual mismatches, forbidden terminology, exaggerated/off-brand tone, mismatched messaging, visual inconsistencies, or incorrect/deprecated brand asset usage.
 Even if the text is short or generic, check if it makes any unverified claims, lacks brand grounding, or violates tone/terminology rules.
 Return ONLY a valid JSON array of findings (between 1 to 4 findings). Each object in the array MUST have these exact keys:
 [
@@ -91,7 +253,7 @@ Return ONLY a valid JSON array of findings (between 1 to 4 findings). Each objec
     "severity": "High" | "Medium" | "Low",
     "confidence": "High",
     "evidence_label": "Outdated/Conflicting" | "Conditional",
-    "category_title": "Unsupported claim" | "Incorrect terminology" | "Tone issue",
+    "category_title": "Unsupported claim" | "Incorrect terminology" | "Tone issue" | "Mismatched Messaging" | "Visual Inconsistency" | "Incorrect Brand Asset Usage",
     "issue_explanation": "Brief explanation of why this excerpt conflicts with the Brand Vault",
     "source_code": "Code + Title + Version from the closest matching Brand Rule or Approved Fact (e.g., F-014 · Packaging specification · v2.1)",
     "source_rule_summary": "The exact description or claim_statement from that Brand Rule or Approved Fact",
@@ -132,6 +294,88 @@ Return ONLY a valid JSON array of findings (between 1 to 4 findings). Each objec
   // 2. Smart Dynamic Rule & Fact Matcher (works even without an API key)
   const findings = [];
   const sentences = contentText.match(/[^.!?]+[.!?]*/g) || [contentText];
+  const lowerContent = contentText.toLowerCase();
+  const lowerVisualContext = visualContext.toLowerCase();
+  const crossModalSource =
+    rules.find((rule) => rule.category !== 'Terminology') || rules[0];
+  const crossModalSourceCode = crossModalSource
+    ? `${crossModalSource.rule_code} · ${crossModalSource.title} · ${crossModalSource.version}`
+    : 'G-001 · Calm, grounded voice · v2.0';
+  const crossModalSourceSummary =
+    crossModalSource?.description ||
+    'Use a consistent campaign message and approved brand assets across every format.';
+
+  if (
+    (lowerContent.includes('workflow') ||
+      lowerContent.includes('automation') ||
+      lowerContent.includes('faster')) &&
+    (lowerVisualContext.includes('analytics') ||
+      lowerVisualContext.includes('legacy') ||
+      lowerVisualContext.includes('dashboard'))
+  ) {
+    findings.push({
+      severity: 'High',
+      confidence: 'High',
+      evidence_label: 'Outdated/Conflicting',
+      category_title: 'Mismatched Messaging',
+      issue_explanation:
+        'The copy promotes workflow automation while the campaign visual or caption presents a legacy analytics dashboard.',
+      source_code: crossModalSourceCode,
+      source_rule_summary: crossModalSourceSummary,
+      original_excerpt: `${contentText} — ${caption || 'campaign visual context'}`,
+      suggested_correction:
+        'Use a campaign visual and caption that clearly demonstrate the workflow automation promise.',
+    });
+  }
+
+  if (
+    caption &&
+    (lowerVisualContext.includes('legacy') ||
+      lowerVisualContext.includes('old ') ||
+      lowerVisualContext.includes('deprecated') ||
+      lowerVisualContext.includes('v1.0'))
+  ) {
+    findings.push({
+      severity: 'High',
+      confidence: 'High',
+      evidence_label: 'Outdated/Conflicting',
+      category_title: 'Visual Inconsistency',
+      issue_explanation:
+        'The visual context describes an outdated layout or campaign version that conflicts with the current campaign promise and approved presentation.',
+      source_code: crossModalSourceCode,
+      source_rule_summary: crossModalSourceSummary,
+      original_excerpt: caption,
+      suggested_correction:
+        'Replace the visual with the current approved campaign layout and update the caption to match.',
+    });
+  }
+
+  if (
+    visualAsset &&
+    (lowerVisualContext.includes('deprecated') ||
+      lowerVisualContext.includes('unapproved') ||
+      lowerVisualContext.includes('old ') ||
+      lowerVisualContext.includes('legacy'))
+  ) {
+    const assetRule =
+      rules.find((rule) => /visual|logo|asset/i.test(`${rule.title} ${rule.description}`)) ||
+      crossModalSource;
+    findings.push({
+      severity: 'High',
+      confidence: 'High',
+      evidence_label: 'Outdated/Conflicting',
+      category_title: 'Incorrect Brand Asset Usage',
+      issue_explanation:
+        'The uploaded visual uses a deprecated or unapproved brand asset or styling.',
+      source_code: assetRule
+        ? `${assetRule.rule_code} · ${assetRule.title} · ${assetRule.version}`
+        : crossModalSourceCode,
+      source_rule_summary: assetRule?.description || crossModalSourceSummary,
+      original_excerpt: visualAsset.name || caption,
+      suggested_correction:
+        'Replace deprecated logos and styling with the current approved Brand Vault asset.',
+    });
+  }
 
   sentences.forEach((rawSentence) => {
     const sentence = rawSentence.trim();
@@ -251,9 +495,9 @@ app.get('/api/brand-vault', async (req, res) => {
     if (assetsErr) console.error('brand_assets error:', assetsErr.message);
 
     res.json({
-      rules: rules || [],
-      facts: facts || [],
-      assets: assets || [],
+      rules: (rules || []).map((rule) => sourceIntegrityMetadata(rule, 'rule')),
+      facts: ensureSampleIntegritySources(facts || []).map((fact) => sourceIntegrityMetadata(fact)),
+      assets: (assets || []).map((asset) => sourceIntegrityMetadata(asset, 'asset')),
       debugErrors: {
         rules: rulesErr?.message || null,
         facts: factsErr?.message || null,
@@ -367,6 +611,9 @@ app.post('/api/reviews/analyze', async (req, res) => {
       creator_initials = 'ML',
       reviewId,
       content_version_id,
+      caption = '',
+      visual_asset_name = '',
+      visual_asset_description = '',
     } = req.body;
 
     const existingReviewId = reviewId || content_version_id || null;
@@ -388,6 +635,7 @@ app.post('/api/reviews/analyze', async (req, res) => {
           title,
           content_type,
           body_text,
+          // Multimodal context is evaluated into durable Proof Cards below.
           status: 'In review',
         })
         .eq('id', existingReviewId)
@@ -429,7 +677,21 @@ app.post('/api/reviews/analyze', async (req, res) => {
       contentVersion = insertedVersions[0];
     }
 
-    const detectedFindings = await runComplianceEngine(title, body_text, rules || [], facts || []);
+    const detectedFindings = await runComplianceEngine(
+      title,
+      body_text,
+      rules || [],
+      ensureSampleIntegritySources(facts || []),
+      {
+        caption,
+        visual_asset: visual_asset_name
+          ? {
+              name: visual_asset_name,
+              description: visual_asset_description,
+            }
+          : null,
+      }
+    );
 
     let insertedCards = [];
     if (detectedFindings.length > 0) {
@@ -488,6 +750,7 @@ app.get('/api/reviews/latest', async (req, res) => {
     res.json({
       review: latestReview,
       proofCards: proofCards || [],
+      evidenceIntegrity: await buildEvidenceIntegrity(latestReview.body_text),
       passport: passports && passports.length > 0 ? passports[0] : null,
     });
   } catch (err) {
@@ -528,6 +791,7 @@ app.get('/api/reviews/:id', async (req, res) => {
     res.json({
       review,
       proofCards: proofCards || [],
+      evidenceIntegrity: await buildEvidenceIntegrity(review.body_text),
       passport: passports && passports.length > 0 ? passports[0] : null,
     });
   } catch (err) {

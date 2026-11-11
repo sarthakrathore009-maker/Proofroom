@@ -34,6 +34,10 @@ export type BrandVaultData = {
     version: string;
     approved_by: string;
     status: string;
+    source_validity?: "Active" | "Expired" | "Superseded";
+    expiry_date?: string;
+    audience_scope?: string;
+    product_scope?: string;
   }>;
   facts: Array<{
     fact_code: string;
@@ -43,6 +47,10 @@ export type BrandVaultData = {
     version: string;
     approved_by: string;
     status: string;
+    source_validity?: "Active" | "Expired" | "Superseded";
+    expiry_date?: string;
+    audience_scope?: string;
+    product_scope?: string;
   }>;
   assets: Array<{
     asset_code: string;
@@ -50,7 +58,21 @@ export type BrandVaultData = {
     description?: string;
     version: string;
     updated_at?: string;
+    source_validity?: "Active" | "Expired" | "Superseded";
+    expiry_date?: string;
+    audience_scope?: string;
+    product_scope?: string;
   }>;
+};
+
+export type EvidenceIntegrityClaim = {
+  claim: string;
+  status: "Supported" | "Outdated" | "Conflicting" | "Unverified";
+  source_code: string | null;
+  source_label: string;
+  audience_product_scope: string;
+  actionable_fix: string;
+  suggested_correction: string;
 };
 
 export type ReviewDetail = {
@@ -75,7 +97,9 @@ export type ReviewDetail = {
     original_excerpt: string;
     suggested_correction: string;
     resolution_status: "Open" | "Accepted" | "Dismissed";
+    exception_reason?: string;
   }>;
+  evidenceIntegrity?: EvidenceIntegrityClaim[];
   passport?: {
     passport_code: string;
     approved_version: string;
@@ -84,6 +108,8 @@ export type ReviewDetail = {
     is_valid: boolean;
     evidence_refs: Array<{ title: string; source: string }>;
     resolved_changes: Array<{ title: string; detail: string; code: string }>;
+    content_hash?: string;
+    version_lock_status?: string;
   } | null;
 };
 
@@ -115,7 +141,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const loadPromiseRef = useRef<Promise<void> | null>(null);
-  const reviewFetchRefs = useRef<Record<string, Promise<ReviewDetail | null>>>({});
+  const reviewFetchRefs = useRef<Record<string, Promise<ReviewDetail | null> | undefined>>({});
 
   const putReviewDetail = useCallback((detail: ReviewDetail) => {
     if (!detail.review?.id) {

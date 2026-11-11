@@ -3,7 +3,11 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Sidebar } from "../../components/Sidebar";
 import { TopHeader } from "../../components/TopHeader";
 import { apiRequest } from "../../lib/api";
-import { useWorkspaceData, type ReviewDetail } from "../../context/WorkspaceDataContext";
+import {
+  useWorkspaceData,
+  type EvidenceIntegrityClaim,
+  type ReviewDetail,
+} from "../../context/WorkspaceDataContext";
 import { getCurrentUser } from "../../lib/roles";
 import {
   RoleAccessPill,
@@ -87,6 +91,7 @@ export const ReviewWorkspace = () => {
   const [reviewType, setReviewType] = useState("");
   const [reviewCode, setReviewCode] = useState("");
   const [creatorName, setCreatorName] = useState("");
+  const [integrityClaims, setIntegrityClaims] = useState<EvidenceIntegrityClaim[]>([]);
 
   const applyDetail = (data: ReviewDetail | null) => {
     if (!data?.review) return;
@@ -97,6 +102,7 @@ export const ReviewWorkspace = () => {
     setReviewCode(data.review.review_code);
     setCreatorName(data.review.creator_name);
     setCards(data.proofCards.map(mapProofCard));
+    setIntegrityClaims(data.evidenceIntegrity ?? []);
   };
 
   useEffect(() => {
@@ -126,6 +132,43 @@ export const ReviewWorkspace = () => {
   const openCount = cards.length - resolvedCount;
   const allResolved = cards.length === 0 || resolvedCount === cards.length;
   const draftSegments = reviewBody.match(/[^.!?]+[.!?]+|[^.!?]+$/g) ?? [];
+  const crossModalChecks = [
+    "Mismatched Messaging",
+    "Visual Inconsistency",
+    "Incorrect Brand Asset Usage",
+  ].map((category) => ({
+    category,
+    finding: cards.find((card) => card.title === category),
+  }));
+  const integrityCounts = {
+    Supported: integrityClaims.filter((claim) => claim.status === "Supported").length,
+    Outdated: integrityClaims.filter((claim) => claim.status === "Outdated").length,
+    Conflicting: integrityClaims.filter((claim) => claim.status === "Conflicting").length,
+    Unverified: integrityClaims.filter((claim) => claim.status === "Unverified").length,
+  };
+  const riskTier =
+    integrityClaims.some((claim) => claim.status === "Unverified" || claim.status === "Conflicting") ||
+    cards.some((card) => card.severity === "High")
+      ? "High Risk"
+      : integrityClaims.some((claim) => claim.status === "Outdated") ||
+          cards.some((card) => /tone|terminology/i.test(card.title))
+        ? "Medium Risk"
+        : "Low Risk";
+  const routingMessage =
+    riskTier === "High Risk"
+      ? "Escalated to Lead Brand Reviewer (Nina Patel) + Compliance/Legal Sign-Off Required"
+      : riskTier === "Medium Risk"
+        ? "Routed to Lead Brand Reviewer (Nina Patel)"
+        : "Routed to Standard Brand Reviewer";
+
+  const applyIntegrityFix = (claim: EvidenceIntegrityClaim) => {
+    if (!canEdit) return;
+    if (claim.suggested_correction) {
+      setReviewBody((current) => current.replace(claim.claim, claim.suggested_correction));
+    } else {
+      setReviewBody((current) => current.replace(claim.claim, "").replace(/\s{2,}/g, " ").trim());
+    }
+  };
 
   const handleCardAction = async (id: string, newStatus: "Accepted" | "Dismissed") => {
     try {
@@ -239,6 +282,136 @@ export const ReviewWorkspace = () => {
               <span className="text-[13px] text-[#6b7280]">Approve &amp; release</span>
             </div>
           </div>
+
+          <section className="mb-6 flex items-center gap-4 rounded-[10px] border border-[#dfe3da] bg-white px-5 py-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#f8f9f6] text-xl">
+              {riskTier === "High Risk" ? "🔴" : riskTier === "Medium Risk" ? "🟡" : "🟢"}
+            </div>
+            <div className="flex flex-1 flex-col gap-1">
+              <span className="text-[13px] font-semibold text-[#173d35]">
+                Risk-Based Reviewer Routing · {riskTier}
+              </span>
+              <span className="text-xs text-[#707871]">{routingMessage}</span>
+            </div>
+          </section>
+
+          <section
+            aria-labelledby="evidence-integrity-title"
+            className="mb-6 overflow-hidden rounded-[10px] border border-[#dfe3da] bg-white"
+          >
+            <div className="border-b border-[#dfe3da] px-5 py-4">
+              <h2 id="evidence-integrity-title" className="text-[15px] font-semibold text-[#173d35]">
+                Evidence Integrity Engine — Claim &amp; Source Verification
+              </h2>
+              <div className="mt-3 grid grid-cols-4 gap-2">
+                {(["Supported", "Outdated", "Conflicting", "Unverified"] as const).map((status) => (
+                  <div key={status} className="rounded-md bg-[#f8f9f6] px-3 py-2">
+                    <div className="text-[10px] uppercase tracking-wide text-[#707871]">{status}</div>
+                    <div className="mt-1 text-lg font-semibold text-[#173d35]">{integrityCounts[status]}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {integrityClaims.length === 0 ? (
+              <p className="px-5 py-4 text-xs text-[#707871]">
+                No promotional claims were detected for source verification.
+              </p>
+            ) : (
+              <div className="divide-y divide-[#dfe3da]">
+                {integrityClaims.map((claim, index) => {
+                  const badge =
+                    claim.status === "Supported"
+                      ? "✅ Supported"
+                      : claim.status === "Outdated"
+                        ? "⏳ Outdated"
+                        : claim.status === "Conflicting"
+                          ? "⚠️ Conflicting"
+                          : "❓ Unverified";
+                  return (
+                    <div key={`${claim.claim}-${index}`} className="grid gap-3 px-5 py-4 md:grid-cols-[1.4fr_0.8fr_1.2fr_1.4fr_1.2fr]">
+                      <div className="text-xs leading-5 text-[#252b29]">“{claim.claim}”</div>
+                      <span className={`h-fit w-fit rounded-full border px-2 py-1 text-[10px] font-semibold ${
+                        claim.status === "Supported"
+                          ? "border-[#bbf7d0] bg-[#f0fdf4] text-[#15803d]"
+                          : claim.status === "Unverified"
+                            ? "border-[#e5e7eb] bg-[#f3f4f6] text-[#6b7280]"
+                            : "border-[#fecaca] bg-[#fef2f2] text-[#dc2626]"
+                      }`}>{badge}</span>
+                      <div className="text-[11px] leading-4 text-[#374151]">
+                        <span className="font-semibold">Matched source &amp; expiry</span>
+                        <br />{claim.source_label}
+                      </div>
+                      <div className="text-[11px] leading-4 text-[#707871]">
+                        {claim.audience_product_scope}
+                      </div>
+                      <div className="flex flex-col items-start gap-1">
+                        <span className="text-[11px] leading-4 text-[#374151]">{claim.actionable_fix}</span>
+                        {canEdit && claim.status !== "Supported" && (
+                          <button
+                            type="button"
+                            onClick={() => applyIntegrityFix(claim)}
+                            className="text-[11px] font-semibold text-[#173d35] underline underline-offset-2 cursor-pointer"
+                          >
+                            Apply fix
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          <section
+            aria-labelledby="cross-modal-verification-title"
+            className="mb-6 overflow-hidden rounded-[10px] border border-[#dfe3da] bg-white"
+          >
+            <div className="border-b border-[#dfe3da] px-5 py-4">
+              <h2
+                id="cross-modal-verification-title"
+                className="text-[15px] font-semibold text-[#173d35]"
+              >
+                Cross-Modal Campaign Verification (Text + Caption + Image)
+              </h2>
+              <p className="mt-1 text-xs text-[#707871]">
+                Campaign copy, visual context, and uploaded assets are checked together
+                against approved Brand Vault guidance.
+              </p>
+            </div>
+            <div className="grid grid-cols-3 divide-x divide-[#dfe3da]">
+              {crossModalChecks.map(({ category, finding }) => (
+                <div key={category} className="flex min-h-[112px] flex-col gap-3 px-5 py-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-xs font-semibold leading-4 text-[#252b29]">
+                      {category}
+                    </span>
+                    <span
+                      className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                        finding
+                          ? "border-[#fecaca] bg-[#fef2f2] text-[#dc2626]"
+                          : "border-[#bbf7d0] bg-[#f0fdf4] text-[#15803d]"
+                      }`}
+                    >
+                      {finding ? "Flagged" : "Clear"}
+                    </span>
+                  </div>
+                  {finding ? (
+                    <a
+                      href={`#proof-card-${finding.id}`}
+                      className="text-[11px] font-semibold text-[#173d35] underline underline-offset-2"
+                    >
+                      View flagged Proof Card →
+                    </a>
+                  ) : (
+                    <span className="text-[11px] text-[#707871]">
+                      No cross-modal conflict detected.
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
 
           {/* Two Columns: Left Draft & Right Proof Cards */}
           <div className="flex items-start gap-6">
@@ -374,6 +547,7 @@ export const ReviewWorkspace = () => {
               {cards.map((card) => (
                 <div
                   key={card.id}
+                  id={`proof-card-${card.id}`}
                   className="overflow-hidden rounded-[10px] border border-[#dfe3da] bg-white"
                 >
                   <div className="flex items-center justify-between border-b border-[#dfe3da] px-4 py-3.5">

@@ -60,6 +60,25 @@ const escapeHtml = (value: string) =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 
+const renderVersionText = (text: string, approved: boolean) => {
+  const terms = approved
+    ? ["80% recycled plastic, excluding the cap", "refill concentrates", "simple step toward a less wasteful routine"]
+    : ["100% recycled plastic", "eco pods", "planet-saving miracle"];
+  const pattern = new RegExp(`(${terms.map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`, "gi");
+  return text.split(pattern).map((part, index) =>
+    terms.some((term) => term.toLowerCase() === part.toLowerCase()) ? (
+      <span
+        key={`${part}-${index}`}
+        className={approved ? "rounded bg-[#dcfce7] px-1 text-[#166534]" : "text-[#b91c1c] line-through decoration-2"}
+      >
+        {part}
+      </span>
+    ) : (
+      <span key={`${part}-${index}`}>{part}</span>
+    )
+  );
+};
+
 export const ApprovalPassport = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -76,7 +95,7 @@ export const ApprovalPassport = () => {
     isInitialLoaded,
     refreshWorkspaceAfterActivity,
   } = useWorkspaceData();
-  const [status, setStatus] = useState<"Approved" | "Changes Requested">("Approved");
+  const [status, setStatus] = useState<"Approved" | "Changes Requested" | "Revoked">("Approved");
   const [contentTitle, setContentTitle] = useState("A simpler clean — launch email");
   const [contentType, setContentType] = useState("Email campaign");
   const [creatorName, setCreatorName] = useState("Maya Lewis");
@@ -91,8 +110,37 @@ export const ApprovalPassport = () => {
   const [approvedContent, setApprovedContent] = useState(
     "Meet a simpler way to clean. Our bottles are made with 80% recycled plastic, excluding the cap. Just add water to our refill concentrates and refill your DemoBrand Co. bottle. It’s a simple step toward a less wasteful routine. Discover the everyday refill ritual."
   );
+  const [originalApprovedContent, setOriginalApprovedContent] = useState(approvedContent);
   const [dynamicResolvedChanges, setDynamicResolvedChanges] = useState(resolvedChanges);
   const [dynamicEvidenceRefs, setDynamicEvidenceRefs] = useState(evidenceRefs);
+  const [approvedHash, setApprovedHash] = useState("—");
+  const [modifiedPostApproval, setModifiedPostApproval] = useState(false);
+  const [reviewCards, setReviewCards] = useState<
+    Array<{
+      category_title: string;
+      original_excerpt: string;
+      suggested_correction: string;
+      exception_reason?: string;
+      resolution_status: string;
+    }>
+  >([]);
+
+  useEffect(() => {
+    let active = true;
+    const calculateHash = async () => {
+      if (!window.crypto?.subtle) return;
+      const bytes = new TextEncoder().encode(approvedContent);
+      const digest = await window.crypto.subtle.digest("SHA-256", bytes);
+      const hash = Array.from(new Uint8Array(digest))
+        .map((byte) => byte.toString(16).padStart(2, "0"))
+        .join("");
+      if (active) setApprovedHash(hash);
+    };
+    void calculateHash();
+    return () => {
+      active = false;
+    };
+  }, [approvedContent]);
 
   useEffect(() => {
     if (!isInitialLoaded) {
@@ -109,7 +157,11 @@ export const ApprovalPassport = () => {
       setCreatorName(data.review.creator_name);
       setReviewCode(data.review.review_code);
       setSubmittedContent(data.review.submitted_body_text ?? data.review.body_text);
-      setApprovedContent(data.review.body_text);
+      if (!modifiedPostApproval) {
+        setApprovedContent(data.review.body_text);
+        setOriginalApprovedContent(data.review.body_text);
+      }
+      setReviewCards(data.proofCards);
       if (passport) {
         setApprovedVersion(passport.approved_version);
         setReviewerName(passport.reviewer_name);
@@ -145,12 +197,33 @@ export const ApprovalPassport = () => {
     return () => {
       active = false;
     };
-  }, [getReviewDetail, latestReviewDetail, reviewId, reviewDetailsById]);
+  }, [getReviewDetail, latestReviewDetail, modifiedPostApproval, reviewId, reviewDetailsById]);
 
   const handleDecision = async (next: "Approved" | "Changes Requested") => {
     if (!canApprove) return;
     setStatus(next);
     await refreshWorkspaceAfterActivity();
+  };
+
+  const testPostApprovalEdit = async () => {
+    setApprovedContent((current) => `${current} [Post-approval edit]`);
+    setModifiedPostApproval(true);
+    setStatus("Revoked");
+    setApprovedVersion("v1.2");
+    await refreshWorkspaceAfterActivity();
+  };
+
+  const restoreApprovedVersion = async () => {
+    setApprovedContent(originalApprovedContent);
+    setModifiedPostApproval(false);
+    setStatus("Approved");
+    setApprovedVersion("v1.1");
+    await refreshWorkspaceAfterActivity();
+  };
+
+  const submitFreshReview = () => {
+    if (!reviewId) return;
+    navigate(`/new-review?reviewId=${encodeURIComponent(reviewId)}`);
   };
 
   const handleDownloadPassport = () => {
@@ -273,7 +346,9 @@ export const ApprovalPassport = () => {
               </h1>
               <span
                 className={`rounded px-2 py-1 text-[11px] font-semibold ${
-                  status === "Approved"
+                  status === "Revoked"
+                    ? "bg-[#fef2f2] text-[#991b1b]"
+                    : status === "Approved"
                     ? "bg-[#dce6de] text-[#173d35]"
                     : "bg-[#f5eedc] text-[#8a642b]"
                 }`}
@@ -319,18 +394,24 @@ export const ApprovalPassport = () => {
           </div>
 
           {/* Approval Confirmation Banner */}
-          <div className="mt-7 flex items-center gap-3 rounded-md bg-[#dce6de] px-5 py-[17px] text-[#173d35]">
+          <div className={`mt-7 flex items-center gap-3 rounded-md px-5 py-[17px] ${
+            status === "Revoked" ? "bg-[#fef2f2] text-[#991b1b]" : "bg-[#dce6de] text-[#173d35]"
+          }`}>
             <i className="ti ti-circle-check text-xl shrink-0" />
             <div className="flex flex-1 flex-col">
               <span className="text-[13px] font-semibold">
-                {status === "Approved"
-                  ? "Approved and ready for release"
-                  : "Changes requested — awaiting new version"}
+          {status === "Revoked"
+            ? "🚫 REVOKED — Content Modified After Approval (v1.1 Lock Broken)"
+            : status === "Approved"
+            ? "Approved and ready for release"
+            : "Changes requested — awaiting new version"}
               </span>
               <span className="text-xs">
-                {status === "Approved"
-                  ? "Elena Ruiz approved v1.1 on 05 Nov 2026 at 10:32. Your evidence and final content are now recorded."
-                  : "Reviewer requested revisions. Edit content in the Review Workspace to generate v1.2."}
+          {status === "Revoked"
+            ? "Passport Invalidated: v1.2 requires a fresh review."
+            : status === "Approved"
+            ? "Elena Ruiz approved v1.1 on 05 Nov 2026 at 10:32. Your evidence and final content are now recorded."
+            : "Reviewer requested revisions. Edit content in the Review Workspace to generate v1.2."}
               </span>
             </div>
             <i className="ti ti-shield-check text-2xl shrink-0" />
@@ -363,7 +444,7 @@ export const ApprovalPassport = () => {
                       <span>v1.0</span>
                     </div>
                     <p className="mt-[15px] text-[13px] leading-5">
-                      {submittedContent}
+                      {renderVersionText(submittedContent, false)}
                     </p>
                   </div>
 
@@ -374,7 +455,7 @@ export const ApprovalPassport = () => {
                       <span className="rounded bg-[#dce6de] px-2 py-0.5">v1.1</span>
                     </div>
                     <p className="mt-[15px] text-[13px] leading-5 text-[#252b29]">
-                      {approvedContent}
+                      {renderVersionText(approvedContent, true)}
                     </p>
                   </div>
                 </div>
@@ -405,6 +486,35 @@ export const ApprovalPassport = () => {
                 </div>
               </div>
 
+              <div className="mt-5 rounded-lg border border-[#dfe3da] bg-white p-[22px]">
+                <h2 className="text-sm font-semibold text-[#252b29]">
+                  Documented Exceptions &amp; Audit Log
+                </h2>
+                <div className="mt-3 flex flex-col gap-3">
+                  {reviewCards.filter((card) => card.exception_reason || card.resolution_status === "Dismissed").length > 0 ? (
+                    reviewCards
+                      .filter((card) => card.exception_reason || card.resolution_status === "Dismissed")
+                      .map((card) => (
+                        <div key={card.category_title} className="rounded-md border border-[#e5e7eb] bg-[#f8f9f6] p-3 text-[11px] leading-4">
+                          <div className="font-semibold text-[#252b29]">
+                            Exception requested by Oliver Chen · {card.category_title}
+                          </div>
+                          <div className="mt-1 text-[#707871]">
+                            Business justification: {card.exception_reason || "Creator requested an exception for this finding."}
+                          </div>
+                          <div className="mt-1 text-[#707871]">
+                            Scope / expiry: Limited to this approved version · Decision: {card.resolution_status} by Nina Patel · {approvalDate}
+                          </div>
+                        </div>
+                      ))
+                  ) : (
+                    <p className="text-[11px] text-[#707871]">
+                      No exceptions recorded. All findings were resolved against the approved Brand Vault evidence.
+                    </p>
+                  )}
+                </div>
+              </div>
+
               {/* Completed Decision Card */}
               <div className="mt-5 rounded-lg border border-[#dfe3da] bg-white p-[22px]">
                 <div className="flex items-center justify-between">
@@ -416,7 +526,7 @@ export const ApprovalPassport = () => {
                 <div className="mt-4 flex flex-wrap items-center gap-2.5">
                   <button
                     type="button"
-                    onClick={() => setStatus("Approved")}
+                    onClick={() => void handleDecision("Approved")}
                     className={`flex min-h-[40px] items-center gap-2 rounded-md border px-4 text-[13px] font-semibold cursor-pointer ${
                       status === "Approved"
                         ? "border-[#dfe3da] bg-[#f8f9f6] text-[#a2a8a1]"
@@ -428,7 +538,7 @@ export const ApprovalPassport = () => {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setStatus("Changes Requested")}
+                    onClick={() => void handleDecision("Changes Requested")}
                     className="flex min-h-[40px] items-center gap-2 rounded-md border border-[#dfe3da] bg-[#f8f9f6] px-4 text-[13px] font-semibold text-[#707871] hover:bg-[#eef0ec] cursor-pointer"
                   >
                     <span>Request Changes</span>
@@ -455,8 +565,12 @@ export const ApprovalPassport = () => {
                   Release Passport
                 </h2>
                 <div className="mt-[15px] flex items-center gap-1.5 text-[11px]">
-                  <i className="ti ti-circle-check text-sm text-[#b8cec3]" />
-                  <span>Approved · Ready for release</span>
+                  <i className={`ti ${modifiedPostApproval ? "ti-alert-triangle text-[#fca5a5]" : "ti-circle-check text-[#b8cec3]"} text-sm`} />
+                  <span>
+                    {modifiedPostApproval
+                      ? "🚫 REVOKED — Content Modified After Approval (v1.1 Lock Broken)"
+                      : "✅ Approved · Ready for release"}
+                  </span>
                 </div>
               </div>
 
@@ -507,6 +621,24 @@ export const ApprovalPassport = () => {
 
                 <div className="my-[18px] h-px w-full bg-[#dfe3da]" />
 
+                <div className="rounded-md border border-[#dfe3da] bg-[#f8f9f6] p-3">
+                  <span className="text-[10px] font-semibold tracking-wide text-[#707871]">
+                    VERSION LOCK STATUS
+                  </span>
+                  <p className="mt-1 text-[11px] font-semibold text-[#173d35]">
+                    🔒 Version-Locked to v1.1
+                  </p>
+                  <span className="mt-3 block text-[10px] font-semibold tracking-wide text-[#707871]">
+                    CONTENT INTEGRITY HASH
+                  </span>
+                  <p className="mt-1 break-all text-[10px] text-[#374151]">
+                    SHA-256: {approvedHash.slice(0, 4)}...{approvedHash.slice(-4)} ({modifiedPostApproval ? "Mismatch" : "Verified Match"})
+                  </p>
+                  <p className="mt-3 text-[10px] leading-4 text-[#707871]">
+                    Version-Locked: Modifying even a single character of approved content automatically invalidates this Release Passport and requires a fresh review.
+                  </p>
+                </div>
+
                 {/* Evidence References */}
                 <div className="flex flex-col">
                   <span className="text-[10px] text-[#707871]">
@@ -533,21 +665,54 @@ export const ApprovalPassport = () => {
                 <button
                   type="button"
                   data-tour="download-passport-btn"
-                  disabled={!canApprove}
+                  disabled={!canApprove || modifiedPostApproval}
                   onClick={handleDownloadPassport}
                   className={`flex min-h-[40px] items-center justify-center gap-2 self-start rounded-md border border-[#dfe3da] bg-white px-4 text-[13px] font-semibold text-[#173d35] ${
-                    canApprove
+                    canApprove && !modifiedPostApproval
                       ? "hover:bg-[#f8f9f6] cursor-pointer"
                       : "opacity-60 cursor-not-allowed"
                   }`}
                 >
-                  <span>{canApprove ? "↓" : "🔒"} Download Passport</span>
+                  <span>{canApprove && !modifiedPostApproval ? "↓" : "🔒"} Download Passport</span>
                 </button>
-                {!canApprove && (
+                {modifiedPostApproval ? (
+                  <p className="mt-2 text-[10px] leading-[15px] text-[#991b1b]">
+                    Passport Invalidated: v1.2 requires a fresh review
+                  </p>
+                ) : !canApprove ? (
                   <p className="mt-2 text-[10px] leading-[15px] text-[#707871]">
                     🔒 {approvalLockNote}
                   </p>
-                )}
+                ) : null}
+
+                <div className="mt-4 flex flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void testPostApprovalEdit()}
+                    className="rounded-md border border-[#b49a63] bg-[#fffaf0] px-3 py-2 text-[11px] font-semibold text-[#765b24] hover:bg-[#fff5dc] cursor-pointer"
+                  >
+                    ⚡ Test Post-Approval Edit (Modify Content)
+                  </button>
+                  {modifiedPostApproval && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={submitFreshReview}
+                        disabled={!canApprove && user.role !== "creator"}
+                        className="rounded-md bg-[#173d35] px-3 py-2 text-[11px] font-semibold text-white cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Submit v1.2 for Fresh Review
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void restoreApprovedVersion()}
+                        className="rounded-md border border-[#dfe3da] px-3 py-2 text-[11px] font-semibold text-[#173d35] hover:bg-[#f8f9f6] cursor-pointer"
+                      >
+                        Restore Approved v1.1
+                      </button>
+                    </>
+                  )}
+                </div>
 
                 <p className="mt-[18px] text-[10px] leading-[15px] text-[#707871]">
                   This passport records approval of this version only. It does not

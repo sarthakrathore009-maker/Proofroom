@@ -34,6 +34,9 @@ export const ContentReviewSection = () => {
   const [content, setContent] = useState("");
   const [selectedType, setSelectedType] = useState("Email campaign");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [caption, setCaption] = useState("");
+  const [visualAssetName, setVisualAssetName] = useState("");
+  const [visualAssetDescription, setVisualAssetDescription] = useState("");
   const [uploadError, setUploadError] = useState("");
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -91,8 +94,20 @@ export const ContentReviewSection = () => {
         body: formData,
       });
       setSelectedFile(file);
-      setTitle(file.name);
-      setContent(result.text);
+      if (["png", "jpg", "jpeg"].includes(extension.slice(1))) {
+        setVisualAssetName(file.name);
+        setVisualAssetDescription(
+          result.text
+            ? `Uploaded campaign visual. OCR context: ${result.text.slice(0, 240)}`
+            : "Uploaded campaign visual."
+        );
+        if (!content.trim()) {
+          setContent(result.text);
+        }
+      } else {
+        setTitle(file.name);
+        setContent(result.text);
+      }
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : "Unable to read this file.");
     } finally {
@@ -110,6 +125,17 @@ export const ContentReviewSection = () => {
     void handleFileUpload(event.dataTransfer.files?.[0] || null);
   };
 
+  const loadCrossModalTestCase = () => {
+    setContent("Experience 50% faster workflow automation across all enterprise teams.");
+    setCaption("Legacy Analytics Dashboard v1.0 — old dark-mono badge preview.");
+    setVisualAssetName("simulated-legacy-analytics-dashboard.png");
+    setVisualAssetDescription(
+      "Simulated attachment of an outdated analytics screenshot using deprecated brand assets."
+    );
+    setSelectedFile(null);
+    setUploadError("");
+  };
+
   const handleReviewContent = async (event: FormEvent) => {
     event.preventDefault();
     if (!canReviewContent) return;
@@ -122,6 +148,11 @@ export const ContentReviewSection = () => {
           title,
           content_type: selectedType,
           body_text: content,
+          caption,
+          ...(visualAssetName ? { visual_asset_name: visualAssetName } : {}),
+          ...(visualAssetDescription
+            ? { visual_asset_description: visualAssetDescription }
+            : {}),
           ...(reviewId ? { reviewId } : {}),
         },
       });
@@ -276,7 +307,7 @@ export const ContentReviewSection = () => {
                   htmlFor="content-review"
                   className="w-fit mt-[-1.00px] [font-family:'Inter-SemiBold',Helvetica] font-semibold text-[#252b29] text-xs leading-[18px] whitespace-nowrap relative tracking-[0]"
                 >
-                  Content to review
+                  Marketing Text / Copy
                 </label>
                 <p className="w-fit mt-[-1.00px] [font-family:'Inter-Regular',Helvetica] font-normal text-[#707871] text-[10px] leading-[15px] whitespace-nowrap relative tracking-[0]">
                   Paste or type your draft
@@ -323,8 +354,8 @@ export const ContentReviewSection = () => {
                 <p className="self-stretch mt-[-1.00px] [font-family:'Inter-Medium',Helvetica] font-medium text-[#252b29] text-xs leading-[18px] relative tracking-[0]">
                   {uploading
                     ? "Reading file…"
-                    : selectedFile
-                    ? selectedFile.name
+                    : visualAssetName || selectedFile
+                    ? visualAssetName || selectedFile?.name
                     : "Or upload a document or image"}
                 </p>
                 <p className="self-stretch [font-family:'Inter-Regular',Helvetica] font-normal text-[#707871] text-[10px] leading-[15px] relative tracking-[0]">
@@ -353,6 +384,28 @@ export const ContentReviewSection = () => {
                 </p>
               )}
             </div>
+            <div className="flex flex-col items-start gap-2 self-stretch w-full">
+              <label
+                htmlFor="image-caption"
+                className="font-semibold text-[#252b29] text-xs leading-[18px]"
+              >
+                Image Caption &amp; Visual Context
+              </label>
+              <textarea
+                id="image-caption"
+                value={caption}
+                onChange={(event) => setCaption(event.target.value)}
+                placeholder="Describe the campaign visual, version, layout, and brand asset context."
+                className="min-h-[76px] resize-y rounded-md border border-[#dfe3da] p-3 text-sm leading-[21px] text-[#252b29] outline-none focus:border-[#173d35] self-stretch"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={loadCrossModalTestCase}
+              className="inline-flex h-9 items-center justify-center rounded-md border border-[#b49a63] bg-[#fffaf0] px-3 text-[12px] font-semibold text-[#765b24] hover:bg-[#fff5dc] cursor-pointer"
+            >
+              ⚡ Load Cross-Modal Test Case
+            </button>
             </div>
 
             {/* Bottom Actions */}
