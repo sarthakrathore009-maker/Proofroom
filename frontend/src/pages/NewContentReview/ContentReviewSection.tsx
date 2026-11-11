@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { apiRequest } from "../../lib/api";
+import { getCurrentUser, type UserRole } from "../../lib/roles";
+import { creatorActionLockNote } from "../../components/RoleAccessPill";
 
 // Icons from screenshot
 const iconCheckGreen =
@@ -38,6 +40,8 @@ export const ContentReviewSection = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const reviewId = searchParams.get("reviewId");
+  const userRole: UserRole = getCurrentUser().role;
+  const canReviewContent = userRole === "creator";
 
   useEffect(() => {
     if (!reviewId) return;
@@ -108,6 +112,7 @@ export const ContentReviewSection = () => {
 
   const handleReviewContent = async (event: FormEvent) => {
     event.preventDefault();
+    if (!canReviewContent) return;
     try {
       const result = await apiRequest<{
         review: { id: string };
@@ -358,19 +363,31 @@ export const ContentReviewSection = () => {
               <button
                 type="submit"
                 data-tour="review-content-btn"
-                className="all-unset box-border inline-flex h-10 items-center justify-center gap-2 px-5 py-0 relative flex-[0_0_auto] bg-[#173d35] rounded-md overflow-hidden border-0 hover:bg-[#245448] cursor-pointer"
+                disabled={!canReviewContent}
+                className={`all-unset box-border inline-flex h-10 items-center justify-center gap-2 px-5 py-0 relative flex-[0_0_auto] bg-[#173d35] rounded-md overflow-hidden border-0 ${
+                  canReviewContent
+                    ? "hover:bg-[#245448] cursor-pointer"
+                    : "opacity-60 cursor-not-allowed"
+                }`}
               >
                 <span className="[font-family:'Inter-SemiBold',Helvetica] font-semibold text-white text-[13px] tracking-[0] leading-[normal]">
-                  Review Content
+                  {canReviewContent ? "Review Content" : "🔒 Review Content"}
                 </span>
-                <span className="relative w-4 h-4">
-                  <img
-                    className="w-full h-full"
-                    alt=""
-                    src={iconArrowRight}
-                  />
-                </span>
+                {canReviewContent && (
+                  <span className="relative w-4 h-4">
+                    <img
+                      className="w-full h-full"
+                      alt=""
+                      src={iconArrowRight}
+                    />
+                  </span>
+                )}
               </button>
+              {!canReviewContent && (
+                <span className="text-[10px] text-[#707871]">
+                  🔒 {creatorActionLockNote(userRole)}
+                </span>
+              )}
             </div>
           </form>
 

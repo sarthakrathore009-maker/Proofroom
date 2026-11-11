@@ -77,20 +77,20 @@ export const approvalAccessMessage = (
     return {
       variant: "unlocked",
       message:
-        "🔓 Unlocked for Reviewer: Full access to audit Proof Cards, comment, approve/reject & generate Release Passports.",
+        "🔓 Unlocked for Reviewer: Full access to audit Proof Cards, approve/reject content, and issue & download the Release Passport.",
     };
   }
   if (role === "creator") {
     return {
       variant: "locked",
       message:
-        "🔒 Locked for Creator • Open for Reviewer to approve content and generate the Release Passport.",
+        "🔒 Locked for Creator (View-Only) • Open for Reviewer to approve content and download the Release Passport.",
     };
   }
   return {
     variant: "locked",
     message:
-      "🔒 Locked for Admin • Open for Reviewer to approve content and generate the Release Passport.",
+      "🔒 Locked for Admin (View-Only) • Open for Reviewer to approve content and download the Release Passport.",
   };
 };
 

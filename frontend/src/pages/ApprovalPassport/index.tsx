@@ -314,6 +314,10 @@ export const ApprovalPassport = () => {
             </div>
           </div>
 
+          <div className="mt-4">
+            <RoleAccessPill variant={approvalAccess.variant} message={approvalAccess.message} />
+          </div>
+
           {/* Approval Confirmation Banner */}
           <div className="mt-7 flex items-center gap-3 rounded-md bg-[#dce6de] px-5 py-[17px] text-[#173d35]">
             <i className="ti ti-circle-check text-xl shrink-0" />
@@ -529,12 +533,21 @@ export const ApprovalPassport = () => {
                 <button
                   type="button"
                   data-tour="download-passport-btn"
+                  disabled={!canApprove}
                   onClick={handleDownloadPassport}
-                  className="flex min-h-[40px] items-center justify-center gap-2 self-start rounded-md border border-[#dfe3da] bg-white px-4 text-[13px] font-semibold text-[#173d35] hover:bg-[#f8f9f6] cursor-pointer"
+                  className={`flex min-h-[40px] items-center justify-center gap-2 self-start rounded-md border border-[#dfe3da] bg-white px-4 text-[13px] font-semibold text-[#173d35] ${
+                    canApprove
+                      ? "hover:bg-[#f8f9f6] cursor-pointer"
+                      : "opacity-60 cursor-not-allowed"
+                  }`}
                 >
-                  <i className="ti ti-download text-base" />
-                  <span>Download Passport</span>
+                  <span>{canApprove ? "↓" : "🔒"} Download Passport</span>
                 </button>
+                {!canApprove && (
+                  <p className="mt-2 text-[10px] leading-[15px] text-[#707871]">
+                    🔒 {approvalLockNote}
+                  </p>
+                )}
 
                 <p className="mt-[18px] text-[10px] leading-[15px] text-[#707871]">
                   This passport records approval of this version only. It does not

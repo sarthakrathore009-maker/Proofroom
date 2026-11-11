@@ -80,7 +80,7 @@ export const ADMIN_TOUR_STEPS: TourStep[] = [
     access: { kind: "locked", forRole: "ADMIN", openFor: "CREATOR" },
   },
   {
-    target: "reviews-approval-passport",
+    target: "release-passport-card",
     route: "/approval",
     title: "Final Sign-Off & Release Passport",
     description:
@@ -117,7 +117,7 @@ export const CREATOR_TOUR_STEPS: TourStep[] = [
     access: { kind: "locked", forRole: "CREATOR", openFor: "ADMIN" },
   },
   {
-    target: "reviews-approval-passport",
+    target: "release-passport-card",
     route: "/approval",
     title: "Final Approval & Release Passport",
     description:
@@ -137,7 +137,7 @@ export const REVIEWER_TOUR_STEPS: TourStep[] = [
     access: { kind: "unlocked", forRole: "REVIEWER" },
   },
   {
-    target: "reviews-approval-passport",
+    target: "release-passport-card",
     route: "/approval",
     title: "Approve & Generate Release Passport",
     description:
