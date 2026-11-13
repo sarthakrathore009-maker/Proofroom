@@ -235,10 +235,12 @@ export const DashboardSection = () => {
   const loading = !isInitialLoaded && !dashboardData;
 
   const displayedReviews = showAllReviews ? liveReviews : liveReviews.slice(0, 5);
-  const inReviewArrowIndex = (() => {
-    const found = displayedReviews.findIndex((review) => review.status === "In review");
-    return found >= 0 ? found : 0;
-  })();
+  const approvedReviewIndex = displayedReviews.findIndex(
+    (review) => review.status === "Approved"
+  );
+  const inReviewIndex = displayedReviews.findIndex(
+    (review) => review.status === "In review"
+  );
   const liveSummaryCards = summaryCards.map((card) => ({
     ...card,
     value:
@@ -370,7 +372,9 @@ export const DashboardSection = () => {
                 navigate(
                   review.status === "Approved"
                     ? `/approval?reviewId=${encodeURIComponent(review.id)}`
-                    : `/new-review?reviewId=${encodeURIComponent(review.id)}`
+                    : review.status === "In review"
+                      ? `/workspace?reviewId=${encodeURIComponent(review.id)}`
+                      : `/new-review?reviewId=${encodeURIComponent(review.id)}`
                 )
               }
               onKeyDown={(event) => {
@@ -379,6 +383,8 @@ export const DashboardSection = () => {
                   navigate(
                     review.status === "Approved"
                       ? `/approval?reviewId=${encodeURIComponent(review.id)}`
+                      : review.status === "In review"
+                        ? `/workspace?reviewId=${encodeURIComponent(review.id)}`
                       : `/new-review?reviewId=${encodeURIComponent(review.id)}`
                   );
                 }
@@ -419,17 +425,25 @@ export const DashboardSection = () => {
               </div>
               <button
                 type="button"
-                data-tour={index === inReviewArrowIndex ? "in-review-arrow" : undefined}
+                data-tour={
+                  index === approvedReviewIndex
+                    ? "approved-review-arrow"
+                    : index === inReviewIndex
+                      ? "in-review-arrow"
+                      : undefined
+                }
                 aria-label={`Open ${review.name}`}
                 onClick={(event) => {
                   event.stopPropagation();
                   navigate(
                     review.status === "Approved"
                       ? `/approval?reviewId=${encodeURIComponent(review.id)}`
-                      : `/new-review?reviewId=${encodeURIComponent(review.id)}`
+                      : review.status === "In review"
+                        ? `/workspace?reviewId=${encodeURIComponent(review.id)}`
+                        : `/new-review?reviewId=${encodeURIComponent(review.id)}`
                   );
                 }}
-                className="relative w-[15px] h-[15px] cursor-pointer"
+                className="relative flex h-8 w-8 items-center justify-center rounded-md border border-transparent text-[#173d35] transition-colors hover:border-emerald-300 hover:bg-emerald-50 hover:ring-2 hover:ring-emerald-100 cursor-pointer"
               >
                 <img
                   className="absolute w-[74.16%] h-[74.16%] top-[25.84%] left-[25.84%]"

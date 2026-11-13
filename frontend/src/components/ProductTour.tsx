@@ -37,6 +37,7 @@ type TourStep = {
     openFor?: TourRoleLabel;
   };
   nextLabel?: string;
+  statusPill?: string;
   onNext?: "download-passport";
   extra?: ReactNode;
 };
@@ -86,6 +87,24 @@ export const ADMIN_TOUR_STEPS: TourStep[] = [
     description:
       "Locked for your Admin role and open exclusively for the Reviewer role (Nina Patel).",
     access: { kind: "locked", forRole: "ADMIN", openFor: "REVIEWER" },
+  },
+  {
+    target: "approved-review-arrow",
+    route: "/dashboard",
+    title: "Approved Review Arrow (↗) — Redirects to Release Passport",
+    description:
+      "Clicking the ↗ arrow on any 'Approved' item redirects you directly to its Approval & Release Passport page, where you can inspect the version-locked approval record and download the Release Passport.",
+    access: { kind: "unlocked", forRole: "ADMIN" },
+    statusPill: "💡 QUICK EVALUATOR TIP 1/2 • APPROVED",
+  },
+  {
+    target: "in-review-arrow",
+    route: "/dashboard",
+    title: "In-Review Arrow (↗) — Redirects to Active Review",
+    description:
+      "Clicking the ↗ arrow on any 'In review' item redirects you to the active review workspace, where you can resolve flagged Proof Cards, edit the draft, and complete the review.",
+    access: { kind: "unlocked", forRole: "ADMIN" },
+    statusPill: "💡 QUICK EVALUATOR TIP 2/2 • IN REVIEW",
     nextLabel: "Finish Tour ✓",
   },
 ];
@@ -123,6 +142,24 @@ export const CREATOR_TOUR_STEPS: TourStep[] = [
     description:
       "Self-approval is locked for your Creator role and open only for the Reviewer role (Nina Patel).",
     access: { kind: "locked", forRole: "CREATOR", openFor: "REVIEWER" },
+  },
+  {
+    target: "approved-review-arrow",
+    route: "/dashboard",
+    title: "Approved Review Arrow (↗) — Redirects to Release Passport",
+    description:
+      "Clicking the ↗ arrow on any 'Approved' item redirects you directly to its Approval & Release Passport page, where you can inspect the version-locked approval record and download the Release Passport.",
+    access: { kind: "unlocked", forRole: "CREATOR" },
+    statusPill: "💡 QUICK EVALUATOR TIP 1/2 • APPROVED",
+  },
+  {
+    target: "in-review-arrow",
+    route: "/dashboard",
+    title: "In-Review Arrow (↗) — Redirects to Active Review",
+    description:
+      "Clicking the ↗ arrow on any 'In review' item redirects you to the active review workspace, where you can resolve flagged Proof Cards, edit the draft, and complete the review.",
+    access: { kind: "unlocked", forRole: "CREATOR" },
+    statusPill: "💡 QUICK EVALUATOR TIP 2/2 • IN REVIEW",
     nextLabel: "Finish Tour ✓",
   },
 ];
@@ -159,6 +196,24 @@ export const REVIEWER_TOUR_STEPS: TourStep[] = [
     description:
       "Submitting or rewriting creator drafts is locked for your Reviewer role and open only for the Creator role (Oliver Chen).",
     access: { kind: "locked", forRole: "REVIEWER", openFor: "CREATOR" },
+  },
+  {
+    target: "approved-review-arrow",
+    route: "/dashboard",
+    title: "Approved Review Arrow (↗) — Redirects to Release Passport",
+    description:
+      "Clicking the ↗ arrow on any 'Approved' item redirects you directly to its Approval & Release Passport page, where you can inspect the version-locked approval record and download the Release Passport.",
+    access: { kind: "unlocked", forRole: "REVIEWER" },
+    statusPill: "💡 QUICK EVALUATOR TIP 1/2 • APPROVED",
+  },
+  {
+    target: "in-review-arrow",
+    route: "/dashboard",
+    title: "In-Review Arrow (↗) — Redirects to Active Review",
+    description:
+      "Clicking the ↗ arrow on any 'In review' item redirects you to the active review workspace, where you can resolve flagged Proof Cards, edit the draft, and complete the review.",
+    access: { kind: "unlocked", forRole: "REVIEWER" },
+    statusPill: "💡 QUICK EVALUATOR TIP 2/2 • IN REVIEW",
     nextLabel: "Finish Tour ✓",
   },
 ];
@@ -347,7 +402,10 @@ export const ProductTour = () => {
     setReady(false);
     setSpotlight(null);
     setStepIndex(0);
-  }, []);
+    if (pathnameRef.current !== "/dashboard") {
+      navigate("/dashboard");
+    }
+  }, [navigate]);
 
   const beginTour = useCallback(() => {
     const role = getCurrentUser().role;
@@ -563,7 +621,7 @@ export const ProductTour = () => {
                 : "border-[#e5e7eb] bg-[#f3f4f6] text-[#6b7280]"
             }`}
           >
-            {accessPillLabel(step.access)}
+            {step.statusPill ?? accessPillLabel(step.access)}
           </div>
         )}
         <h2
